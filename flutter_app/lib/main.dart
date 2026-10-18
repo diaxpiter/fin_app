@@ -1,9 +1,16 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
+import 'src/account.dart';
 import 'src/app_controller.dart';
+import 'src/backend.dart';
+import 'src/config.dart';
 import 'src/layout.dart';
 import 'src/screens/ajustes.dart';
+import 'src/screens/auth.dart';
 import 'src/screens/fixas.dart';
 import 'src/screens/home.dart';
 import 'src/screens/movimentos.dart';
@@ -11,31 +18,86 @@ import 'src/screens/nova.dart';
 import 'src/screens/previsao.dart';
 import 'src/store.dart';
 import 'src/theme.dart';
+import 'src/widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await Store.open();
-  runApp(FinApp(controller: AppController(store)));
+  SharedPreferences? prefs;
+  try {
+    prefs = await SharedPreferences.getInstance();
+  } catch (_) {}
+  Backend? backend;
+  try {
+    await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);
+    // email links (confirm account, reset password) come back to this page
+    backend = SupabaseBackend(Supabase.instance.client,
+        redirectTo: kIsWeb ? '${Uri.base.origin}${Uri.base.path}' : null);
+  } catch (_) {/* accounts unavailable: the app still works on-device */}
+  final account = AccountController(store: store, backend: backend, prefs: prefs);
+  await account.init();
+  runApp(FinApp(controller: AppController(store), account: account));
 }
 
 class FinApp extends StatelessWidget {
-  const FinApp({super.key, required this.controller});
+  const FinApp({super.key, required this.controller, required this.account});
   final AppController controller;
+  final AccountController account;
 
   @override
-  Widget build(BuildContext context) => AppScope(
-        controller: controller,
-        child: MaterialApp(
-          title: 'Painel Financeiro',
-          debugShowCheckedModeBanner: false,
-          theme: buildTheme(),
-          themeMode: ThemeMode.dark,
-          locale: const Locale('pt', 'PT'),
-          supportedLocales: const [Locale('pt', 'PT')],
-          localizationsDelegates: GlobalMaterialLocalizations.delegates,
-          home: const Shell(),
+  Widget build(BuildContext context) => AccountScope(
+        account: account,
+        child: AppScope(
+          controller: controller,
+          child: MaterialApp(
+            title: 'Painel Financeiro',
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(),
+            themeMode: ThemeMode.dark,
+            locale: const Locale('pt', 'PT'),
+            supportedLocales: const [Locale('pt', 'PT')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            home: const AccountGate(),
+          ),
         ),
       );
+}
+
+/// Picks the screen from the account state; pulls changes when the app comes back to the foreground.
+class AccountGate extends StatefulWidget {
+  const AccountGate({super.key});
+
+  @override
+  State<AccountGate> createState() => _AccountGateState();
+}
+
+class _AccountGateState extends State<AccountGate> {
+  late final AppLifecycleListener _life;
+
+  @override
+  void initState() {
+    super.initState();
+    _life = AppLifecycleListener(onResume: () => AccountScope.of(context, listen: false).pull());
+  }
+
+  @override
+  void dispose() {
+    _life.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final account = AccountScope.of(context);
+    final notice = account.takeNotice();
+    if (notice != null) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? toast(context, notice) : null);
+    return switch (account.status) {
+      AccountStatus.signedOut => const AuthScreen(),
+      AccountStatus.setup => const SetupScreen(),
+      AccountStatus.recovering => const RecoveryScreen(),
+      AccountStatus.guest || AccountStatus.unlocked => const Shell(),
+    };
+  }
 }
 
 const _destinations = [

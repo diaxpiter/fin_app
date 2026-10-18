@@ -33,13 +33,35 @@ flutter run            # pick a device, or: -d chrome / -d windows / -d <phone>
 `flutter create .` only adds the missing platform folders (android/, ios/, web/…). It
 leaves `lib/` and `test/` alone.
 
-## Privacy
+## Accounts and privacy
 
-Everything stays on the device (shared_preferences: localStorage on web, UserDefaults on
-iOS, SharedPreferences on Android, a local file on desktop). There is no server and no
-account, so nobody else, the developer included, can see the data.
-Backups are a JSON copy made through the clipboard (Ajustes → Exportar / Importar). The
-format is the same as the PWA's, so a copy from one app imports into the other.
+People can use the app **without an account** (data stays on that device only) or
+**create an account** to have their data on every device.
+
+With an account, the data is **end-to-end encrypted** (`lib/src/crypto.dart`):
+
+- The password never leaves the device. PBKDF2 (600 000 rounds) turns it into a login
+  secret for Supabase and a separate key that unlocks the data.
+- The data is encrypted with AES-256-GCM before upload. The `vaults` table holds only
+  ciphertext, so whoever runs the Supabase project can't read anyone's finances.
+- On their first sign-in, users get a **recovery key**. If they forget the password, the
+  reset email plus that key restores access. Without either one the data is gone; that
+  is the price of the admin not being able to read it.
+- Each user can reach only their own row (row-level security), and **Apagar conta**
+  deletes the account and its data (`supabase/schema.sql`).
+
+Changes save on the device at once and sync about a second later. If two devices edit at
+the same moment, the first save wins and the other device is told.
+
+Backups: Ajustes → Exportar / Importar copies a JSON backup through the clipboard. The
+format is the same as the PWA's.
+
+### Supabase setup (once)
+
+1. SQL Editor → paste `../supabase/schema.sql` → Run.
+2. Authentication → URL Configuration: **Site URL** `https://diaxpiter.github.io/fin_app/`;
+   add `http://localhost:8080/` under **Redirect URLs** for local testing.
+3. Project URL and anon key go in `lib/src/config.dart`. The anon key is public by design.
 
 ## Code
 
@@ -50,9 +72,14 @@ lib/src/logic.dart            finance maths: port of ../src/logic.js, keep in sy
 lib/src/models.dart           data classes + JSON (same schema as the PWA)
 lib/src/seed.dart             example data from the sheet
 lib/src/store.dart            on-device persistence
+lib/src/crypto.dart           end-to-end encryption, recovery key
+lib/src/backend.dart          Supabase login + vault storage
+lib/src/account.dart          sign up/in/out, recovery, sync
+lib/src/config.dart           Supabase project URL + anon key
 lib/src/app_controller.dart   UI state + derived model
 lib/src/widgets.dart          shared rows, chips, pickers, action sheet
 lib/src/screens/              Início, Movimentos, Nova, Previsão, Fixas, Ajustes
 test/logic_test.dart          sheet numbers (same cases as the JS tests)
 test/widget_test.dart         renders every tab at 5 screen sizes, adds an expense
+test/account_test.dart        encryption, sign-up/in, recovery, sync, conflicts (fake server)
 ```

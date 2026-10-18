@@ -8,11 +8,13 @@ environment:
   flutter: ">=3.22.0"
 
 dependencies:
+  cryptography: ^2.9.0
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
   shared_preferences: ^2.3.2
+  supabase_flutter: ^2.18.3
 
 dev_dependencies:
   flutter_test:

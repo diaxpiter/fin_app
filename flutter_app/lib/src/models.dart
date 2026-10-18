@@ -93,7 +93,7 @@ class Config {
 
 class AppState {
   AppState({required this.config, required this.categories, required this.recurring, required this.movements});
-  final Config config;
+  Config config;
   final List<Category> categories;
   final List<Recurring> recurring;
   List<Movement> movements;

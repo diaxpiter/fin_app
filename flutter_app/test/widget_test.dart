@@ -2,6 +2,7 @@
 // navigation adapts and nothing overflows.
 
 import 'package:fin_app/main.dart';
+import 'package:fin_app/src/account.dart';
 import 'package:fin_app/src/app_controller.dart';
 import 'package:fin_app/src/store.dart';
 import 'package:flutter/material.dart';
@@ -11,8 +12,12 @@ Future<void> pumpAt(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final app = AppController(Store.memory(), clock: () => DateTime(2026, 11, 1));
-  await tester.pumpWidget(FinApp(controller: app));
+  final store = Store.memory();
+  final app = AppController(store, clock: () => DateTime(2026, 11, 1));
+  // no backend → guest mode, straight to the app
+  final account = AccountController(store: store, backend: null, prefs: null);
+  await account.init();
+  await tester.pumpWidget(FinApp(controller: app, account: account));
   await tester.pumpAndSettle();
 }
 

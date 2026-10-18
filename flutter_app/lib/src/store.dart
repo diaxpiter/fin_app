@@ -87,4 +87,15 @@ class Store extends ChangeNotifier {
     _state = seedState();
     _commit();
   }
+
+  void setStartDay(int day) {
+    _state.config = Config(cycleStartDay: day, openingBalance: _state.config.openingBalance);
+    _commit();
+  }
+
+  /// Swap in data loaded from the account (or a fresh state on sign-out).
+  void replaceState(AppState state) {
+    _state = state;
+    _commit();
+  }
 }

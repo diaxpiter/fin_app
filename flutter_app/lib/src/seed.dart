@@ -63,3 +63,11 @@ AppState seedState() {
     movements: [...first, ...expandRecurring(recurring, ids, config.cycleStartDay, overrides)],
   );
 }
+
+/// What a brand-new account starts with: categories only, calendar-month cycles.
+AppState emptyState() => AppState(
+      config: const Config(cycleStartDay: 1, openingBalance: 0),
+      categories: [...categories],
+      recurring: [],
+      movements: [],
+    );

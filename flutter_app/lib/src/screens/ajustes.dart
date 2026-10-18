@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../account.dart';
 import '../app_controller.dart';
+import '../backend.dart';
 import '../layout.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -31,11 +33,47 @@ class AjustesScreen extends StatelessWidget {
           ),
         );
 
+    final account = AccountScope.of(context);
+    final signedIn = account.status == AccountStatus.unlocked;
+    // back to the root so the account screens (sign-in…) aren't hidden behind this page
+    void toRoot() => Navigator.of(context).popUntil((r) => r.isFirst);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Ajustes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600))),
       body: ScreenList(bottom: 32, children: [
+        const Lbl('Conta'),
+        const SizedBox(height: 10),
         Container(height: 1, color: Palette.line),
-        row('Dia de início do ciclo', 'Os ciclos começam no dia $startDay'),
+        if (signedIn) ...[
+          row(account.email ?? 'Conta', switch (account.sync) {
+            SyncState.idle => 'Sincronizado · cifrado de ponta a ponta',
+            SyncState.syncing => 'A sincronizar…',
+            SyncState.offline => 'Sem ligação — as alterações ficam guardadas aqui e sobem depois',
+          }, onTap: account.pull),
+          row('Terminar sessão', 'Os dados saem deste dispositivo e ficam na tua conta', onTap: () async {
+            toRoot();
+            await account.signOut();
+          }),
+          row('Apagar conta', 'Apaga a conta e todos os dados no servidor, para sempre', color: Palette.neg,
+              onTap: () async {
+            if (!await confirm(context, 'Apagar a conta e todos os dados? Não é possível desfazer.', 'Apagar')) return;
+            try {
+              await account.deleteAccount();
+              if (context.mounted) toRoot();
+            } on BackendError catch (e) {
+              if (context.mounted) toast(context, e.message);
+            }
+          }),
+        ] else if (account.available)
+          row('Criar conta ou entrar', 'Para ter os dados em vários dispositivos, cifrados', onTap: () {
+            toRoot();
+            account.showSignIn();
+          }),
+        const SizedBox(height: 28),
+        const Lbl('Dados'),
+        const SizedBox(height: 10),
+        Container(height: 1, color: Palette.line),
+        row('Dia de início do ciclo', 'Os ciclos começam no dia $startDay', onTap: () => _pickStartDay(context, app)),
         row('Exportar dados', 'Copia uma cópia (JSON) para a área de transferência', onTap: () async {
           await Clipboard.setData(ClipboardData(text: app.store.exportJSON()));
           if (context.mounted) toast(context, 'Cópia copiada');
@@ -51,11 +89,52 @@ class AjustesScreen extends StatelessWidget {
           }
         }),
         const SizedBox(height: 24),
-        const Text('Os dados ficam só neste dispositivo e nunca são enviados para nenhum servidor. '
-            'Exporta uma cópia de vez em quando.',
-            style: TextStyle(fontSize: 12, height: 1.5, color: Palette.muted)),
+        Text(
+            signedIn
+                ? 'Os dados são cifrados neste dispositivo antes de irem para o servidor. '
+                    'Só tu os consegues ler, com a tua palavra-passe ou a chave de recuperação.'
+                : 'Os dados ficam só neste dispositivo e nunca são enviados para nenhum servidor. '
+                    'Exporta uma cópia de vez em quando.',
+            style: const TextStyle(fontSize: 12, height: 1.5, color: Palette.muted)),
       ]),
     );
+  }
+
+  Future<void> _pickStartDay(BuildContext context, AppController app) async {
+    final current = app.store.state.config.cycleStartDay;
+    final day = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Palette.surface,
+        title: const Text('Dia de início do ciclo'),
+        content: SizedBox(
+          width: 320,
+          child: Wrap(spacing: 6, runSpacing: 6, children: [
+            for (var d = 1; d <= 28; d++)
+              Material(
+                color: d == current ? Palette.text : Palette.bg,
+                shape: const CircleBorder(side: BorderSide(color: Palette.line2)),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => Navigator.pop(ctx, d),
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Center(
+                      child: Text('$d', style: mono(size: 14, color: d == current ? Palette.bg : Palette.text)),
+                    ),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar'))],
+      ),
+    );
+    if (day != null && day != current) {
+      app.store.setStartDay(day);
+      app.resetCycle();
+    }
   }
 
   Future<void> _import(BuildContext context, AppController app) async {
