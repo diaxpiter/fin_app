@@ -4,6 +4,8 @@ A personal finance web app for iPhone. It installs from Safari to the Home Scree
 
 It is built from the "Financial - Davi" Google Sheet: money is organised in **cycles that start on the 23rd** (23 Oct – 22 Nov is the "Nov" cycle), with recurring bills, a forecast, and quick expense entry.
 
+A Flutter version of the same app is in [`flutter_app/`](flutter_app/README.md). It runs natively on Android, iOS, web and desktop, and its layout adapts from small phones to wide desktop windows.
+
 ## Screens
 
 | Screen | What it does |
@@ -34,9 +36,12 @@ The tests check the cycle maths against the numbers in the Google Sheet (cycle t
 
 ## Put it on your iPhone
 
-1. Publish the repo with GitHub Pages: **Settings → Pages → Deploy from a branch → `main` / root**.
-2. Open `https://<user>.github.io/fin_app/` in **Safari** on the iPhone.
-3. Share → **Add to Home Screen**.
+The site is the Flutter app, built and deployed by [`.github/workflows/pages.yml`](.github/workflows/pages.yml) on every push to `main` (tests run first; a failing test blocks the deploy).
+
+1. One time: repo **Settings → Pages → Source: GitHub Actions**.
+2. Push to `main`, wait for the "Deploy to GitHub Pages" run (Actions tab, ~3 min).
+3. Open `https://diaxpedro.github.io/fin-app/` in **Safari** on the iPhone (or Chrome on Android).
+4. Share → **Add to Home Screen**.
 
 It must be opened from the Home Screen icon to run full-screen like an app.
 
