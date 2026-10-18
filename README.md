@@ -40,7 +40,7 @@ The site is the Flutter app, built and deployed by [`.github/workflows/pages.yml
 
 1. One time: repo **Settings → Pages → Source: GitHub Actions**.
 2. Push to `main`, wait for the "Deploy to GitHub Pages" run (Actions tab, ~3 min).
-3. Open `https://diaxpedro.github.io/fin-app/` in **Safari** on the iPhone (or Chrome on Android).
+3. Open `https://diaxpiter.github.io/fin_app/` in **Safari** on the iPhone (or Chrome on Android).
 4. Share → **Add to Home Screen**.
 
 It must be opened from the Home Screen icon to run full-screen like an app.
