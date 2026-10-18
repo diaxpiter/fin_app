@@ -27,13 +27,13 @@ class FakeBackend implements Backend {
   Stream<BackendEvent> get events => _events.stream;
 
   void _net() {
-    if (offline) throw const BackendError('Sem ligação.');
+    if (offline) throw const BackendError(ErrorCode.offline);
   }
 
   @override
   Future<bool> signUp(String email, String authSecret) async {
     _net();
-    if (server.users.containsKey(email)) throw const BackendError('exists');
+    if (server.users.containsKey(email)) throw const BackendError(ErrorCode.emailExists);
     server.users[email] = authSecret;
     if (server.requireConfirmation) return false;
     server.confirmed.add(email);
@@ -44,8 +44,8 @@ class FakeBackend implements Backend {
   @override
   Future<void> signIn(String email, String authSecret) async {
     _net();
-    if (server.users[email] != authSecret) throw const BackendError('Email ou palavra-passe errados.');
-    if (!server.confirmed.contains(email)) throw const BackendError('Confirma primeiro o teu email.');
+    if (server.users[email] != authSecret) throw const BackendError(ErrorCode.invalidCredentials);
+    if (!server.confirmed.contains(email)) throw const BackendError(ErrorCode.emailNotConfirmed);
     _user = email;
   }
 

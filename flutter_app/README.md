@@ -18,6 +18,24 @@ keyboard, Nova despesa accepts digits, Backspace and Enter.
 
 Breakpoints live in `lib/src/layout.dart`.
 
+## Fixed bills, language and currency
+
+- **Fixed bills** (Fixas): add, edit or delete salary, rent, utilities… Each one is planned
+  as a *Previsto* movement for the current cycle and the next 11 (`syncRecurring` in
+  `lib/src/logic.dart`). Editing a bill rewrites only its future planned movements: paid
+  ones and past cycles stay as they are, and a movement typed in by hand isn't duplicated.
+  A new account's first login asks for them, along with language, currency and the day
+  the month starts.
+- **Language**: Português or English (`lib/src/i18n.dart`, both side by side). Until the
+  user picks one it follows the device. Default category names are stored in Portuguese
+  and shown translated.
+- **Currency**: EUR, USD, GBP, BRL, CHF, CAD, AUD, AOA, MZN. Numbers follow the language
+  (`1.234,56 €` / `€1,234.56`), and typed amounts are accepted in either style. Changing
+  the currency only changes the symbol; amounts are not converted.
+
+Language and currency are saved with the data, so with an account they follow the user
+to every device.
+
 ## First run
 
 Install Flutter (3.22 or newer): https://docs.flutter.dev/get-started/install
@@ -76,10 +94,13 @@ lib/src/crypto.dart           end-to-end encryption, recovery key
 lib/src/backend.dart          Supabase login + vault storage
 lib/src/account.dart          sign up/in/out, recovery, sync
 lib/src/config.dart           Supabase project URL + anon key
+lib/src/i18n.dart             interface text (pt / en), money formatting
 lib/src/app_controller.dart   UI state + derived model
 lib/src/widgets.dart          shared rows, chips, pickers, action sheet
-lib/src/screens/              Início, Movimentos, Nova, Previsão, Fixas, Ajustes
+lib/src/screens/              Início, Movimentos, Nova, Previsão, Fixas (bills.dart), Ajustes,
+                              account screens (auth.dart), first login (onboarding.dart)
 test/logic_test.dart          sheet numbers (same cases as the JS tests)
 test/widget_test.dart         renders every tab at 5 screen sizes, adds an expense
 test/account_test.dart        encryption, sign-up/in, recovery, sync, conflicts (fake server)
+test/i18n_test.dart           number/currency formatting, amount parsing, saved preferences
 ```

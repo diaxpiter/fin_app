@@ -38,6 +38,8 @@ enum AccountStatus {
 
 enum SyncState { idle, syncing, offline }
 
+enum Notice { syncConflict }
+
 const minPasswordLength = 10;
 
 class AccountController extends ChangeNotifier {
@@ -63,7 +65,7 @@ class AccountController extends ChangeNotifier {
 
   /// Shown once on the setup screen; the user must store it.
   String? recoveryKey;
-  String? _notice;
+  Notice? _notice;
 
   crypto.PasswordKeys? _pendingKeys;
   SecretKey? _dataKey;
@@ -87,7 +89,7 @@ class AccountController extends ChangeNotifier {
   }
 
   /// A one-off message for the user (e.g. a sync conflict). Reading clears it.
-  String? takeNotice() {
+  Notice? takeNotice() {
     final n = _notice;
     _notice = null;
     return n;
@@ -129,7 +131,7 @@ class AccountController extends ChangeNotifier {
     }
   }
 
-  Backend _need() => backend ?? (throw const BackendError('Contas indisponíveis nesta versão.'));
+  Backend _need() => backend ?? (throw const BackendError(ErrorCode.unavailable));
 
   // ---------------- sign up / in ----------------
 
@@ -175,7 +177,7 @@ class AccountController extends ChangeNotifier {
     try {
       dk = await crypto.unwrapKey(keys.wrappingKey, v.wrappedKeyPassword);
     } catch (_) {
-      throw const BackendError('Não foi possível desbloquear os dados desta conta.');
+      throw const BackendError(ErrorCode.unlockFailed);
     }
     await _unlock(dk, v);
   }
@@ -221,7 +223,7 @@ class AccountController extends ChangeNotifier {
     _checkPassword(newPassword);
     final b = _need();
     final email = b.email;
-    if (email == null) throw const BackendError('A ligação expirou. Pede outro email de recuperação.');
+    if (email == null) throw const BackendError(ErrorCode.linkExpired);
     final keys = await crypto.derivePasswordKeys(email, newPassword, iterations: iterations);
 
     var v = await b.fetchVault();
@@ -233,10 +235,10 @@ class AccountController extends ChangeNotifier {
     final SecretKey dk;
     try {
       dk = await crypto.unwrapKey(await crypto.recoveryWrappingKey(recoveryKey), v.wrappedKeyRecovery);
-    } on FormatException catch (e) {
-      throw BackendError(e.message);
+    } on FormatException {
+      throw const BackendError(ErrorCode.invalidRecoveryKey);
     } catch (_) {
-      throw const BackendError('Chave de recuperação errada.');
+      throw const BackendError(ErrorCode.wrongRecoveryKey);
     }
     await b.setAuthSecret(keys.authSecret);
     final wrapped = await crypto.wrapKey(keys.wrappingKey, dk);
@@ -361,7 +363,7 @@ class AccountController extends ChangeNotifier {
     final v = await backend!.fetchVault();
     if (v == null || v.version == _version || _dataKey == null) return;
     final state = AppState.fromJson(await crypto.decryptJson(_dataKey!, v.ciphertext));
-    if (_dirty) _notice = 'Os dados foram alterados noutro dispositivo. A tua última alteração aqui não foi guardada.';
+    if (_dirty) _notice = Notice.syncConflict;
     _version = v.version;
     _dirty = false;
     await _persistSync();
@@ -370,7 +372,7 @@ class AccountController extends ChangeNotifier {
 
   void _checkPassword(String p) {
     if (p.length < minPasswordLength) {
-      throw const BackendError('A palavra-passe precisa de pelo menos $minPasswordLength caracteres.');
+      throw const BackendError(ErrorCode.shortPassword, min: minPasswordLength);
     }
   }
 

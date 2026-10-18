@@ -19,12 +19,19 @@ class VaultRow {
   final String wrappedKeyPassword, wrappedKeyRecovery, ciphertext;
 }
 
-/// A failure to show the user (already in Portuguese).
+enum ErrorCode {
+  invalidCredentials, emailNotConfirmed, emailExists, rateLimited, invalidEmail, offline, server,
+  unavailable, unlockFailed, linkExpired, wrongRecoveryKey, invalidRecoveryKey, shortPassword, other,
+}
+
+/// A failure to show the user; the text comes from S.error (i18n.dart).
 class BackendError implements Exception {
-  const BackendError(this.message);
-  final String message;
+  const BackendError(this.code, {this.detail, this.min});
+  final ErrorCode code;
+  final String? detail;
+  final int? min;
   @override
-  String toString() => message;
+  String toString() => 'BackendError(${code.name}${detail == null ? '' : ': $detail'})';
 }
 
 enum BackendEvent { passwordRecovery, signedOut }
@@ -84,41 +91,31 @@ class SupabaseBackend implements Backend {
     try {
       return await f();
     } on sb.AuthException catch (e) {
-      throw BackendError(_authMessage(e));
+      throw _authError(e);
     } on sb.PostgrestException catch (e) {
-      throw BackendError('Erro no servidor (${e.code ?? e.message}).');
+      throw BackendError(ErrorCode.server, detail: e.code ?? e.message);
     } on BackendError {
       rethrow;
     } catch (_) {
-      throw const BackendError('Sem ligação. Verifica a internet e tenta outra vez.');
+      throw const BackendError(ErrorCode.offline);
     }
   }
 
-  static String _authMessage(sb.AuthException e) {
-    switch (e.code) {
-      case 'invalid_credentials':
-        return 'Email ou palavra-passe errados.';
-      case 'email_not_confirmed':
-        return 'Confirma primeiro o teu email (vê a caixa de entrada).';
-      case 'user_already_exists':
-      case 'email_exists':
-        return 'Já existe uma conta com este email. Entra em vez de criar.';
-      case 'over_email_send_rate_limit':
-      case 'over_request_rate_limit':
-        return 'Demasiados pedidos. Espera uns minutos e tenta outra vez.';
-      case 'email_address_invalid':
-      case 'validation_failed':
-        return 'Email inválido.';
-    }
-    return e.message;
-  }
+  static BackendError _authError(sb.AuthException e) => switch (e.code) {
+        'invalid_credentials' => const BackendError(ErrorCode.invalidCredentials),
+        'email_not_confirmed' => const BackendError(ErrorCode.emailNotConfirmed),
+        'user_already_exists' || 'email_exists' => const BackendError(ErrorCode.emailExists),
+        'over_email_send_rate_limit' || 'over_request_rate_limit' => const BackendError(ErrorCode.rateLimited),
+        'email_address_invalid' || 'validation_failed' => const BackendError(ErrorCode.invalidEmail),
+        _ => BackendError(ErrorCode.other, detail: e.message),
+      };
 
   @override
   Future<bool> signUp(String email, String authSecret) => _guard(() async {
         final r = await _auth.signUp(email: email, password: authSecret, emailRedirectTo: redirectTo);
         // With email enumeration protection on, an existing email returns a user with no identities.
         if (r.user != null && (r.user!.identities?.isEmpty ?? false)) {
-          throw const BackendError('Já existe uma conta com este email. Entra em vez de criar.');
+          throw const BackendError(ErrorCode.emailExists);
         }
         return r.session != null;
       });

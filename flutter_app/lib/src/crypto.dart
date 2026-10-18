@@ -91,7 +91,7 @@ String newRecoveryKey() {
 /// Accepts any case, spaces or dashes. Throws [FormatException] if malformed.
 Uint8List parseRecoveryKey(String key) {
   final s = key.toUpperCase().replaceAll(RegExp(r'[^A-Z2-7]'), '');
-  if (s.length != 32) throw const FormatException('Chave de recuperação inválida.');
+  if (s.length != 32) throw const FormatException('invalid recovery key');
   final out = <int>[];
   var bits = 0, value = 0;
   for (final ch in s.split('')) {

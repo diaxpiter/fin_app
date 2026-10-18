@@ -15,6 +15,8 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final s = app.s;
+    final lang = app.lang;
     final m = app.model;
     final c = m.cycle;
     final size = sizeClassOf(context);
@@ -31,12 +33,12 @@ class HomeScreen extends StatelessWidget {
 
     final summary = <Widget>[
       const SizedBox(height: 28),
-      const Lbl('Sobra do ciclo'),
+      Lbl(s.leftThisCycle),
       const SizedBox(height: 14),
       BigAmount(c.sobra, size: wide ? 80 : 68, color: c.sobra < 0 ? Palette.neg : Palette.text),
       const SizedBox(height: 12),
       Text(
-        '${empty ? 'Ainda sem movimentos neste ciclo' : '${c.savingsRate}% da receita'} · hoje, ${formatDay(m.today)}',
+        '${empty ? s.noMovementsInCycle : s.pctOfIncome(c.savingsRate)} · ${s.todayIs(formatDay(m.today, lang))}',
         style: const TextStyle(fontSize: 14, color: Palette.muted, height: 1.4),
       ),
       const SizedBox(height: 28),
@@ -55,44 +57,44 @@ class HomeScreen extends StatelessWidget {
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Text.rich(TextSpan(children: [
           const TextSpan(text: '● ', style: TextStyle(color: Palette.accent)),
-          TextSpan(text: 'Pago $paid%'),
+          TextSpan(text: s.paidPct(paid)),
         ]), style: const TextStyle(fontSize: 12, color: Palette.muted)),
-        Text('Por pagar $planned%', style: const TextStyle(fontSize: 12, color: Palette.muted)),
+        Text(s.toPayPct(planned), style: const TextStyle(fontSize: 12, color: Palette.muted)),
       ]),
       const SizedBox(height: 24),
       _StatGrid(columns: size == SizeClass.medium ? 4 : 2, cells: [
-        ('Receitas', c.receitas, Palette.text),
-        ('Despesas', c.despesas, Palette.neg),
-        ('Em conta', cashNow(m.state), Palette.text),
-        ('Mais baixo', c.lowest, Palette.text),
+        (s.income, c.receitas, Palette.text),
+        (s.expenses, c.despesas, Palette.neg),
+        (s.inAccount, cashNow(m.state), Palette.text),
+        (s.lowest, c.lowest, Palette.text),
       ]),
     ];
 
     final next = <Widget>[
       SizedBox(height: wide ? 28 : 24),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        const Flexible(
-          child: Text('Próximos pagamentos',
-              overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text(s.upcoming,
+              overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         ),
         TextButton(
           onPressed: () => app.setTab(1),
           style: TextButton.styleFrom(foregroundColor: Palette.muted),
-          child: const Text('Ver todos', style: TextStyle(fontSize: 13)),
+          child: Text(s.seeAll, style: const TextStyle(fontSize: 13)),
         ),
       ]),
       if (upcoming.isEmpty)
-        const Padding(
-          padding: EdgeInsets.only(top: 16),
-          child: Text('Nada por pagar a partir de hoje.', style: TextStyle(fontSize: 14, color: Palette.muted)),
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: Text(s.nothingToPay, style: const TextStyle(fontSize: 14, color: Palette.muted)),
         ),
       for (final x in upcoming)
         InfoRow(
           leading: Dot(m.colorOf(x.category)),
           title: Text(x.description, style: const TextStyle(fontSize: 15), overflow: TextOverflow.ellipsis),
           trailing: [
-            Text(formatDay(x.date), style: mono(size: 12, color: Palette.muted)),
-            SizedBox(width: 90, child: Text(fmtCents(x.cents), style: mono(), textAlign: TextAlign.right)),
+            Text(formatDay(x.date, lang), style: mono(size: 12, color: Palette.muted)),
+            SizedBox(width: 90, child: Text(app.money.amount(x.cents), style: mono(), textAlign: TextAlign.right)),
           ],
         ),
     ];
@@ -103,7 +105,7 @@ class HomeScreen extends StatelessWidget {
         TopRow(children: [
           CyclePicker(m),
           IconButton(
-            tooltip: 'Ajustes',
+            tooltip: s.settings,
             color: Palette.muted,
             icon: const Icon(Icons.tune),
             onPressed: () => openAjustes(context),
@@ -151,7 +153,8 @@ class _StatGrid extends StatelessWidget {
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
-                      child: Text(fmtCents(cents), style: mono(size: 20, weight: FontWeight.w500, color: color)),
+                      child: Text(AppScope.of(context).money.amount(cents),
+                          style: mono(size: 20, weight: FontWeight.w500, color: color)),
                     ),
                   ]),
                 ),

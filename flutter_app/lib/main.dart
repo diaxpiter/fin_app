@@ -8,6 +8,7 @@ import 'src/account.dart';
 import 'src/app_controller.dart';
 import 'src/backend.dart';
 import 'src/config.dart';
+import 'src/i18n.dart';
 import 'src/layout.dart';
 import 'src/screens/ajustes.dart';
 import 'src/screens/auth.dart';
@@ -51,15 +52,19 @@ class FinApp extends StatelessWidget {
         account: account,
         child: AppScope(
           controller: controller,
-          child: MaterialApp(
-            title: 'Painel Financeiro',
-            debugShowCheckedModeBanner: false,
-            theme: buildTheme(),
-            themeMode: ThemeMode.dark,
-            locale: const Locale('pt', 'PT'),
-            supportedLocales: const [Locale('pt', 'PT')],
-            localizationsDelegates: GlobalMaterialLocalizations.delegates,
-            home: const AccountGate(),
+          // rebuilt when the language changes, so dialogs and pickers follow it
+          child: ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) => MaterialApp(
+              title: controller.s.appName,
+              debugShowCheckedModeBanner: false,
+              theme: buildTheme(),
+              themeMode: ThemeMode.dark,
+              locale: controller.lang == 'pt' ? const Locale('pt', 'PT') : const Locale('en'),
+              supportedLocales: const [Locale('pt', 'PT'), Locale('en')],
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
+              home: const AccountGate(),
+            ),
           ),
         ),
       );
@@ -92,7 +97,10 @@ class _AccountGateState extends State<AccountGate> {
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
     final notice = account.takeNotice();
-    if (notice != null) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? toast(context, notice) : null);
+    if (notice != null) {
+      final text = switch (notice) { Notice.syncConflict => AppScope.of(context, listen: false).s.syncConflict };
+      WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? toast(context, text) : null);
+    }
     return switch (account.status) {
       AccountStatus.signedOut => const AuthScreen(),
       AccountStatus.setup => const SetupScreen(),
@@ -103,12 +111,12 @@ class _AccountGateState extends State<AccountGate> {
   }
 }
 
-const _destinations = [
-  (Icons.home_outlined, Icons.home, 'Início'),
-  (Icons.format_list_bulleted, Icons.format_list_bulleted, 'Movimentos'),
-  (Icons.bar_chart_outlined, Icons.bar_chart, 'Previsão'),
-  (Icons.repeat, Icons.repeat, 'Fixas'),
-];
+List<(IconData, IconData, String)> _destinations(S s) => [
+      (Icons.home_outlined, Icons.home, s.navHome),
+      (Icons.format_list_bulleted, Icons.format_list_bulleted, s.navMovements),
+      (Icons.bar_chart_outlined, Icons.bar_chart, s.navForecast),
+      (Icons.repeat, Icons.repeat, s.navBills),
+    ];
 
 /// Navigation adapts to the window: bottom bar on phones, rail on tablets,
 /// extended rail with labels on desktop / large tablets.
@@ -120,6 +128,7 @@ class Shell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final s = app.s;
     final size = sizeClassOf(context);
     final page = _pages[app.tab];
 
@@ -128,7 +137,7 @@ class Shell extends StatelessWidget {
         body: SafeArea(bottom: false, child: page),
         floatingActionButton: app.tab < 2
             ? FloatingActionButton(
-                tooltip: 'Nova despesa', onPressed: () => openNova(context), child: const Icon(Icons.add, size: 26))
+                tooltip: s.newExpense, onPressed: () => openNova(context), child: const Icon(Icons.add, size: 26))
             : null,
         bottomNavigationBar: DecoratedBox(
           decoration: const BoxDecoration(border: Border(top: BorderSide(color: Palette.line))),
@@ -136,7 +145,7 @@ class Shell extends StatelessWidget {
             selectedIndex: app.tab,
             onDestinationSelected: app.setTab,
             destinations: [
-              for (final (icon, selected, label) in _destinations)
+              for (final (icon, selected, label) in _destinations(s))
                 NavigationDestination(icon: Icon(icon), selectedIcon: Icon(selected), label: label),
             ],
           ),
@@ -150,7 +159,7 @@ class Shell extends StatelessWidget {
     return Scaffold(
       floatingActionButton: short
           ? FloatingActionButton(
-              tooltip: 'Nova despesa', onPressed: () => openNova(context), child: const Icon(Icons.add))
+              tooltip: s.newExpense, onPressed: () => openNova(context), child: const Icon(Icons.add))
           : null,
       body: SafeArea(
         child: Row(children: [
@@ -164,26 +173,26 @@ class Shell extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8, bottom: 16),
               child: extended
                   ? FloatingActionButton.extended(
-                      tooltip: 'Nova despesa',
+                      tooltip: s.newExpense,
                       onPressed: () => openNova(context),
                       shape: const StadiumBorder(),
                       icon: const Icon(Icons.add),
-                      label: const Text('Nova despesa', style: TextStyle(fontWeight: FontWeight.w600)),
+                      label: Text(s.newExpense, style: const TextStyle(fontWeight: FontWeight.w600)),
                     )
                   : FloatingActionButton(
-                      tooltip: 'Nova despesa', onPressed: () => openNova(context), child: const Icon(Icons.add)),
+                      tooltip: s.newExpense, onPressed: () => openNova(context), child: const Icon(Icons.add)),
             ),
             trailing: short ? null : Padding(
               padding: const EdgeInsets.only(top: 16),
               child: IconButton(
-                tooltip: 'Ajustes',
+                tooltip: s.settings,
                 color: Palette.muted,
                 icon: const Icon(Icons.tune),
                 onPressed: () => openAjustes(context),
               ),
             ),
             destinations: [
-              for (final (icon, selected, label) in _destinations)
+              for (final (icon, selected, label) in _destinations(s))
                 NavigationRailDestination(icon: Icon(icon), selectedIcon: Icon(selected), label: Text(label)),
             ],
           ),

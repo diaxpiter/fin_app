@@ -14,6 +14,9 @@ class PrevisaoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final s = app.s;
+    final lang = app.lang;
+    final money = app.money;
     final m = app.model;
     final plan = m.cycles.where((c) => c.items.isNotEmpty).toList();
     final last = plan.isNotEmpty ? plan.last : m.cycle;
@@ -34,16 +37,18 @@ class PrevisaoScreen extends StatelessWidget {
       maxWidth: 900,
       bottom: 32,
       children: [
-        const TopRow(children: [H1('Previsão')]),
+        TopRow(children: [H1(s.navForecast)]),
         const SizedBox(height: 6),
-        Text('${plan.length} ciclos${plan.isNotEmpty ? ' · ${plan.first.label} – ${last.label}' : ''}',
+        Text(
+            '${s.cycleCount(plan.length)}'
+            '${plan.isNotEmpty ? ' · ${cycleLabel(plan.first.id, lang)} – ${cycleLabel(last.id, lang)}' : ''}',
             style: mono(size: 12, color: Palette.muted)),
         const SizedBox(height: 26),
-        Lbl('Saldo acumulado em ${cycleLabel(last.id).toLowerCase()}'),
+        Lbl(s.balanceBy(cycleLabel(last.id, lang))),
         const SizedBox(height: 14),
         BigAmount(last.endBalance, size: 52),
         const SizedBox(height: 26),
-        const Lbl('Sobra por ciclo'),
+        Lbl(s.leftPerCycle),
         const SizedBox(height: 14),
         // as many bars as fit: 7 on a phone, the whole plan on a wide screen
         LayoutBuilder(builder: (context, c) {
@@ -72,7 +77,7 @@ class PrevisaoScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       FittedBox(
                         fit: BoxFit.scaleDown,
-                        child: Text(cycleLabel(bars[i].id).substring(0, 3),
+                        child: Text(cycleLabel(bars[i].id, lang).substring(0, 3),
                             maxLines: 1,
                             style: mono(
                                 size: 11,
@@ -91,8 +96,8 @@ class PrevisaoScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Row(children: [
-            const Expanded(flex: 12, child: Lbl('Ciclo')),
-            for (final h in ['Entra', 'Sai', 'Sobra', if (showSaldo) 'Saldo'])
+            Expanded(flex: 12, child: Lbl(s.colCycle)),
+            for (final h in [s.colIn, s.colOut, s.colLeft, if (showSaldo) s.colBalance])
               Expanded(flex: 10, child: Align(alignment: Alignment.centerRight, child: Lbl(h))),
           ]),
         ),
@@ -103,14 +108,14 @@ class PrevisaoScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 13),
               decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Palette.line))),
               child: Row(children: [
-                cell(c.label,
+                cell(cycleLabel(c.id, lang),
                     flex: 12,
                     first: true,
                     style: TextStyle(fontSize: 15, color: c.id == m.cycle.id ? Palette.accent : Palette.text)),
-                cell(fmtCents(c.receitas)),
-                cell(fmtCents(c.despesas), color: Palette.neg),
-                cell(fmtCents(c.sobra), color: c.sobra < 0 ? Palette.neg : Palette.text),
-                if (showSaldo) cell(fmtCents(c.endBalance), color: Palette.muted),
+                cell(money.amount(c.receitas)),
+                cell(money.amount(c.despesas), color: Palette.neg),
+                cell(money.amount(c.sobra), color: c.sobra < 0 ? Palette.neg : Palette.text),
+                if (showSaldo) cell(money.amount(c.endBalance), color: Palette.muted),
               ]),
             ),
           ),

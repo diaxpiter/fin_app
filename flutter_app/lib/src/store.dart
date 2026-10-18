@@ -89,8 +89,19 @@ class Store extends ChangeNotifier {
     _commit();
   }
 
+  /// null = follow the device language.
+  void setLanguage(String? lang) {
+    _state.config = _state.config.copyWith(language: lang, clearLanguage: lang == null);
+    _commit();
+  }
+
+  void setCurrency(String code) {
+    _state.config = _state.config.copyWith(currency: code);
+    _commit();
+  }
+
   void setStartDay(int day) {
-    _state.config = Config(cycleStartDay: day, openingBalance: _state.config.openingBalance);
+    _state.config = _state.config.copyWith(cycleStartDay: day);
     // planned bills move to the new cycles
     _state.movements = syncRecurring(_state, todayISO(), regenerate: _state.recurring.map((r) => r.id).toSet()) ??
         _state.movements;

@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../account.dart';
+import '../app_controller.dart';
 import '../backend.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'preferences.dart';
 
 /// Centred, width-capped column used by all account screens.
 class AuthFrame extends StatelessWidget {
@@ -78,7 +80,7 @@ class _FieldState extends State<_Field> {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             suffixIcon: widget.password
                 ? IconButton(
-                    tooltip: _hidden ? 'Mostrar' : 'Esconder',
+                    tooltip: _hidden ? AppScope.of(context).s.show : AppScope.of(context).s.hide,
                     icon: Icon(_hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
                     onPressed: () => setState(() => _hidden = !_hidden),
                   )
@@ -123,8 +125,6 @@ Widget _message(String? text, {bool error = true}) => text == null
         child: Text(text, style: TextStyle(fontSize: 14, height: 1.4, color: error ? Palette.neg : Palette.accent)),
       );
 
-const _privacy = 'Os teus dados são cifrados neste dispositivo antes de serem enviados. '
-    'Ninguém — nem quem gere o servidor — os consegue ler.';
 
 // ---------------------------------------------------------------------------
 
@@ -159,16 +159,17 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _submit() async {
     final account = AccountScope.of(context, listen: false);
+    final s = AppScope.of(context, listen: false).s;
     final email = _email.text.trim();
     setState(() {
       _error = null;
       _info = null;
     });
-    if (!email.contains('@')) return setState(() => _error = 'Indica o teu email.');
+    if (!email.contains('@')) return setState(() => _error = s.enterEmail);
     if (_mode == _Mode.signUp && _pass.text != _pass2.text) {
-      return setState(() => _error = 'As palavras-passe não coincidem.');
+      return setState(() => _error = s.passwordsDontMatch);
     }
-    if (_mode != _Mode.forgot && _pass.text.isEmpty) return setState(() => _error = 'Indica a palavra-passe.');
+    if (_mode != _Mode.forgot && _pass.text.isEmpty) return setState(() => _error = s.enterPassword);
     setState(() => _busy = true);
     try {
       switch (_mode) {
@@ -179,17 +180,16 @@ class _AuthScreenState extends State<AuthScreen> {
           if (!ready && mounted) {
             _pass2.clear();
             _mode = _Mode.signIn;
-            _info = 'Enviámos um email para $email. Abre a ligação para confirmar a conta e depois entra aqui.';
+            _info = s.confirmEmailSent(email);
           }
         case _Mode.forgot:
           await account.sendPasswordReset(email);
-          _info = 'Se existir uma conta com este email, vais receber uma ligação para definir uma nova palavra-passe. '
-              'Vais precisar da tua chave de recuperação.';
+          _info = s.resetEmailSent;
       }
     } on BackendError catch (e) {
-      _error = e.message;
+      _error = s.error(e);
     } catch (_) {
-      _error = 'Algo correu mal. Tenta outra vez.';
+      _error = s.somethingWrong;
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -197,20 +197,21 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
+    final s = AppScope.of(context).s;
     final (title, action) = switch (_mode) {
-      _Mode.signIn => ('Entrar', 'Entrar'),
-      _Mode.signUp => ('Criar conta', 'Criar conta'),
-      _Mode.forgot => ('Recuperar acesso', 'Enviar email'),
+      _Mode.signIn => (s.signIn, s.signIn),
+      _Mode.signUp => (s.createAccount, s.createAccount),
+      _Mode.forgot => (s.recoverAccess, s.sendEmail),
     };
     return AuthFrame(children: [
-      const Lbl('Painel Financeiro'),
-      const SizedBox(height: 12),
+      Row(children: [Expanded(child: Lbl(s.appName)), const LanguageSwitch()]),
+      const SizedBox(height: 4),
       H1(title),
       const SizedBox(height: 10),
-      const Text(_privacy, style: TextStyle(fontSize: 14, height: 1.45, color: Palette.muted)),
+      Text(s.privacyBlurb, style: const TextStyle(fontSize: 14, height: 1.45, color: Palette.muted)),
       const SizedBox(height: 8),
       _Field(
-        label: 'Email',
+        label: s.email,
         controller: _email,
         keyboard: TextInputType.emailAddress,
         autofill: const [AutofillHints.email, AutofillHints.username],
@@ -218,16 +219,16 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
       if (_mode != _Mode.forgot)
         _Field(
-          label: 'Palavra-passe',
+          label: s.password,
           controller: _pass,
           password: true,
-          hint: _mode == _Mode.signUp ? 'Pelo menos $minPasswordLength caracteres' : null,
+          hint: _mode == _Mode.signUp ? s.atLeastChars(minPasswordLength) : null,
           autofill: [_mode == _Mode.signUp ? AutofillHints.newPassword : AutofillHints.password],
           onSubmitted: _mode == _Mode.signIn ? (_) => _submit() : null,
         ),
       if (_mode == _Mode.signUp)
         _Field(
-          label: 'Repetir palavra-passe',
+          label: s.repeatPassword,
           controller: _pass2,
           password: true,
           autofill: const [AutofillHints.newPassword],
@@ -237,27 +238,27 @@ class _AuthScreenState extends State<AuthScreen> {
       _message(_info, error: false),
       _Primary(label: action, busy: _busy, onPressed: _submit),
       if (_busy && _mode != _Mode.forgot)
-        const Padding(
-          padding: EdgeInsets.only(top: 10),
-          child: Text('A proteger a tua chave… pode demorar uns segundos.',
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Palette.muted)),
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(s.securingKey,
+              textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Palette.muted)),
         ),
       const SizedBox(height: 18),
       if (_mode == _Mode.signIn) ...[
-        TextButton(onPressed: () => _switch(_Mode.signUp), child: const Text('Ainda não tenho conta — criar conta')),
+        TextButton(onPressed: () => _switch(_Mode.signUp), child: Text(s.noAccountYet)),
         TextButton(
           onPressed: () => _switch(_Mode.forgot),
           style: TextButton.styleFrom(foregroundColor: Palette.muted),
-          child: const Text('Esqueci-me da palavra-passe'),
+          child: Text(s.forgotPassword),
         ),
       ] else
-        TextButton(onPressed: () => _switch(_Mode.signIn), child: const Text('Já tenho conta — entrar')),
+        TextButton(onPressed: () => _switch(_Mode.signIn), child: Text(s.haveAccount)),
       const SizedBox(height: 8),
       const Divider(color: Palette.line),
       TextButton(
         onPressed: _busy ? null : account.continueAsGuest,
         style: TextButton.styleFrom(foregroundColor: Palette.muted),
-        child: const Text('Continuar sem conta (dados só neste dispositivo)'),
+        child: Text(s.continueAsGuest),
       ),
     ]);
   }
@@ -278,6 +279,7 @@ class _SetupScreenState extends State<SetupScreen> {
   String? _error;
 
   Future<void> _finish(AccountController account) async {
+    final s = AppScope.of(context, listen: false).s;
     setState(() {
       _busy = true;
       _error = null;
@@ -285,9 +287,9 @@ class _SetupScreenState extends State<SetupScreen> {
     try {
       await account.finishSetup(keepDeviceData: _keep ?? false);
     } on BackendError catch (e) {
-      _error = e.message;
+      _error = s.error(e);
     } catch (_) {
-      _error = 'Algo correu mal. Tenta outra vez.';
+      _error = s.somethingWrong;
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -295,18 +297,15 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
+    final s = AppScope.of(context).s;
     final key = account.recoveryKey ?? '';
     _keep ??= account.wasGuest;
     return AuthFrame(children: [
-      const Lbl('Último passo'),
+      Lbl(s.lastStep),
       const SizedBox(height: 12),
-      const H1('A tua chave de recuperação', size: 26),
+      H1(s.recoveryKeyTitle, size: 26),
       const SizedBox(height: 12),
-      const Text(
-        'Se te esqueceres da palavra-passe, esta chave é a única forma de voltares a ver os teus dados. '
-        'Nem nós a temos. Guarda-a num gestor de palavras-passe ou escreve-a em papel.',
-        style: TextStyle(fontSize: 14, height: 1.45, color: Palette.muted),
-      ),
+      Text(s.recoveryKeyIntro, style: const TextStyle(fontSize: 14, height: 1.45, color: Palette.muted)),
       const SizedBox(height: 20),
       Container(
         padding: const EdgeInsets.all(16),
@@ -321,10 +320,10 @@ class _SetupScreenState extends State<SetupScreen> {
           TextButton.icon(
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: key));
-              if (context.mounted) toast(context, 'Chave copiada');
+              if (context.mounted) toast(context, s.keyCopied);
             },
             icon: const Icon(Icons.copy, size: 16),
-            label: const Text('Copiar'),
+            label: Text(s.copy),
           ),
         ]),
       ),
@@ -334,18 +333,18 @@ class _SetupScreenState extends State<SetupScreen> {
         onChanged: (v) => setState(() => _saved = v ?? false),
         contentPadding: EdgeInsets.zero,
         controlAffinity: ListTileControlAffinity.leading,
-        title: const Text('Guardei a chave num sítio seguro', style: TextStyle(fontSize: 15)),
+        title: Text(s.savedKey, style: const TextStyle(fontSize: 15)),
       ),
       CheckboxListTile(
         value: _keep,
         onChanged: (v) => setState(() => _keep = v ?? false),
         contentPadding: EdgeInsets.zero,
         controlAffinity: ListTileControlAffinity.leading,
-        title: const Text('Levar os dados deste dispositivo para a conta', style: TextStyle(fontSize: 15)),
-        subtitle: const Text('Se não, a conta começa vazia.', style: TextStyle(fontSize: 12, color: Palette.muted)),
+        title: Text(s.keepDeviceData, style: const TextStyle(fontSize: 15)),
+        subtitle: Text(s.keepDeviceDataSub, style: const TextStyle(fontSize: 12, color: Palette.muted)),
       ),
       _message(_error),
-      _Primary(label: 'Continuar', busy: _busy, onPressed: _saved ? () => _finish(account) : null),
+      _Primary(label: s.continueAction, busy: _busy, onPressed: _saved ? () => _finish(account) : null),
     ]);
   }
 }
@@ -374,7 +373,8 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
   Future<void> _submit() async {
     final account = AccountScope.of(context, listen: false);
-    if (_pass.text != _pass2.text) return setState(() => _error = 'As palavras-passe não coincidem.');
+    final s = AppScope.of(context, listen: false).s;
+    if (_pass.text != _pass2.text) return setState(() => _error = s.passwordsDontMatch);
     setState(() {
       _busy = true;
       _error = null;
@@ -382,9 +382,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     try {
       await account.completeRecovery(_key.text, _pass.text);
     } on BackendError catch (e) {
-      _error = e.message;
+      _error = s.error(e);
     } catch (_) {
-      _error = 'Algo correu mal. Tenta outra vez.';
+      _error = s.somethingWrong;
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -392,37 +392,35 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   @override
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
+    final s = AppScope.of(context).s;
     return AuthFrame(children: [
-      Lbl(account.email ?? 'Recuperar acesso'),
+      Lbl(account.email ?? s.recoverAccess),
       const SizedBox(height: 12),
-      const H1('Nova palavra-passe', size: 26),
+      H1(s.newPassword, size: 26),
       const SizedBox(height: 10),
-      const Text(
-        'Para desbloquear os teus dados com uma nova palavra-passe, indica a chave de recuperação que guardaste ao criar a conta.',
-        style: TextStyle(fontSize: 14, height: 1.45, color: Palette.muted),
-      ),
-      _Field(label: 'Chave de recuperação', controller: _key, hint: 'XXXX-XXXX-XXXX-…'),
+      Text(s.recoveryIntro, style: const TextStyle(fontSize: 14, height: 1.45, color: Palette.muted)),
+      _Field(label: s.recoveryKey, controller: _key, hint: 'XXXX-XXXX-XXXX-…'),
       _Field(
-        label: 'Nova palavra-passe',
+        label: s.newPassword,
         controller: _pass,
         password: true,
-        hint: 'Pelo menos $minPasswordLength caracteres',
+        hint: s.atLeastChars(minPasswordLength),
         autofill: const [AutofillHints.newPassword],
       ),
       _Field(
-        label: 'Repetir palavra-passe',
+        label: s.repeatPassword,
         controller: _pass2,
         password: true,
         autofill: const [AutofillHints.newPassword],
         onSubmitted: (_) => _submit(),
       ),
       _message(_error),
-      _Primary(label: 'Guardar e entrar', busy: _busy, onPressed: _submit),
+      _Primary(label: s.saveAndSignIn, busy: _busy, onPressed: _submit),
       const SizedBox(height: 12),
       TextButton(
         onPressed: _busy ? null : account.cancelRecovery,
         style: TextButton.styleFrom(foregroundColor: Palette.muted),
-        child: const Text('Cancelar'),
+        child: Text(s.cancel),
       ),
     ]);
   }

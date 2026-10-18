@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
+import '../i18n.dart';
 import '../layout.dart';
 import '../logic.dart';
 import '../theme.dart';
@@ -59,7 +60,7 @@ class _NovaScreenState extends State<NovaScreen> {
 
   void _save() {
     if (_cents <= 0) {
-      setState(() => _error = 'Indica um valor.');
+      setState(() => _error = AppScope.of(context, listen: false).s.enterAmount);
       return;
     }
     final app = AppScope.of(context, listen: false);
@@ -70,7 +71,7 @@ class _NovaScreenState extends State<NovaScreen> {
     Navigator.of(context).pop();
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('Despesa adicionada')));
+      ..showSnackBar(SnackBar(content: Text(app.s.expenseAdded)));
   }
 
   Future<void> _pickDate() async {
@@ -106,6 +107,8 @@ class _NovaScreenState extends State<NovaScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final s = app.s;
+    final lang = app.lang;
     final m = app.model;
     _date ??= m.today;
     final cats = m.state.categories.where((c) => c.type == 'Saída');
@@ -123,21 +126,21 @@ class _NovaScreenState extends State<NovaScreen> {
         padding: const EdgeInsets.only(bottom: 10),
         decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Palette.surface2))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Lbl('Descrição'),
+          Lbl(s.description),
           const SizedBox(height: 8),
           TextField(
             controller: _desc,
             textInputAction: TextInputAction.done,
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
-            decoration: const InputDecoration.collapsed(
-                hintText: 'Ex.: Supermercado', hintStyle: TextStyle(color: Color(0xFF55555B))),
+            decoration: InputDecoration.collapsed(
+                hintText: s.expenseHint, hintStyle: const TextStyle(color: Color(0xFF55555B))),
           ),
         ]),
       ),
       const SizedBox(height: 16),
       Wrap(spacing: 8, runSpacing: 8, children: [
         for (final c in cats)
-          PillChip(label: c.name, selected: _cat == c.name, onTap: () => setState(() => _cat = c.name)),
+          PillChip(label: s.category(c.name), selected: _cat == c.name, onTap: () => setState(() => _cat = c.name)),
       ]),
       const SizedBox(height: 16),
       Row(children: [
@@ -156,7 +159,7 @@ class _NovaScreenState extends State<NovaScreen> {
                   const Icon(Icons.calendar_today_outlined, size: 16, color: Palette.muted),
                   const SizedBox(width: 8),
                   Flexible(
-                    child: Text('${_date == m.today ? 'Hoje, ' : ''}${formatDay(_date!)}',
+                    child: Text('${_date == m.today ? s.todayPrefix : ''}${formatDay(_date!, lang)}',
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                   ),
@@ -166,7 +169,7 @@ class _NovaScreenState extends State<NovaScreen> {
           ),
         ),
         const SizedBox(width: 10),
-        Expanded(child: _Segmented(value: _estado, onChanged: (v) => setState(() => _estado = v))),
+        Expanded(child: _Segmented(value: _estado, label: s.estado, onChanged: (v) => setState(() => _estado = v))),
       ]),
     ];
 
@@ -181,14 +184,14 @@ class _NovaScreenState extends State<NovaScreen> {
             child: Column(children: [
               Row(children: [
                 IconButton(
-                  tooltip: 'Fechar',
+                  tooltip: s.close,
                   color: Palette.muted,
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
-                const Expanded(
-                  child: Text('Nova despesa',
-                      textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                Expanded(
+                  child: Text(s.newExpense,
+                      textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(width: 48),
               ]),
@@ -197,7 +200,7 @@ class _NovaScreenState extends State<NovaScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: LayoutBuilder(builder: (context, c) {
                     final keyH = c.maxHeight < 600 ? 44.0 : 52.0;
-                    final pad = _Keypad(keyHeight: keyH, onKey: _key, onSave: _save);
+                    final pad = _Keypad(keyHeight: keyH, onKey: _key, onSave: _save, s: s);
                     // landscape phones / short windows: fields and keypad side by side
                     if (c.maxWidth >= 600 && c.maxHeight < 520) {
                       return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -224,8 +227,9 @@ class _NovaScreenState extends State<NovaScreen> {
 }
 
 class _Segmented extends StatelessWidget {
-  const _Segmented({required this.value, required this.onChanged});
+  const _Segmented({required this.value, required this.label, required this.onChanged});
   final String value;
+  final String Function(String) label;
   final ValueChanged<String> onChanged;
 
   @override
@@ -248,7 +252,7 @@ class _Segmented extends StatelessWidget {
                   child: SizedBox(
                     height: 36,
                     child: Center(
-                      child: Text(e,
+                      child: Text(label(e),
                           style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -263,7 +267,8 @@ class _Segmented extends StatelessWidget {
 }
 
 class _Keypad extends StatelessWidget {
-  const _Keypad({required this.keyHeight, required this.onKey, required this.onSave});
+  const _Keypad({required this.keyHeight, required this.onKey, required this.onSave, required this.s});
+  final S s;
   final double keyHeight;
   final ValueChanged<String> onKey;
   final VoidCallback onSave;
@@ -294,7 +299,7 @@ class _Keypad extends StatelessWidget {
                         height: keyHeight,
                         child: Center(
                           child: row[i] == 'back'
-                              ? const Icon(Icons.backspace_outlined, size: 22, semanticLabel: 'Apagar')
+                              ? Icon(Icons.backspace_outlined, size: 22, semanticLabel: s.delete)
                               : Text(row[i], style: mono(size: 22, weight: FontWeight.w500)),
                         ),
                       ),
@@ -316,7 +321,7 @@ class _Keypad extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
-            child: const Text('Adicionar despesa'),
+            child: Text(s.addExpense),
           ),
         ),
       ]);

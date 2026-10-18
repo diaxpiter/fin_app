@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
+import '../i18n.dart';
 import '../layout.dart';
 import '../logic.dart';
 import '../models.dart';
@@ -12,16 +13,10 @@ import '../theme.dart';
 import '../widgets.dart';
 
 /// Common bills offered as one-tap starting points (amount and day still to fill in).
-const billSuggestions = [
-  Recurring(id: '', description: 'Salário', category: 'Receita', cents: 0, day: 1, variable: true),
-  Recurring(id: '', description: 'Renda', category: 'Moradia', cents: 0, day: 1),
-  Recurring(id: '', description: 'Luz', category: 'Moradia', cents: 0, day: 1, variable: true),
-  Recurring(id: '', description: 'Água', category: 'Moradia', cents: 0, day: 1, variable: true),
-  Recurring(id: '', description: 'Internet', category: 'Moradia', cents: 0, day: 1),
-  Recurring(id: '', description: 'Telemóvel', category: 'Moradia', cents: 0, day: 1),
-  Recurring(id: '', description: 'Ginásio', category: 'Subscrição', cents: 0, day: 1),
-  Recurring(id: '', description: 'Streaming', category: 'Subscrição', cents: 0, day: 1),
-];
+List<Recurring> billSuggestions(S s) => [
+      for (final (category, name, variable) in s.billSuggestions)
+        Recurring(id: '', description: name, category: category, cents: 0, day: 1, variable: variable),
+    ];
 
 Widget _pill(String text) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -36,7 +31,8 @@ class BillRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final m = AppScope.of(context).model;
+    final app = AppScope.of(context);
+    final m = app.model;
     final now = cycleIdOf(m.today, m.state.config.cycleStartDay);
     final income = m.isIncome(bill.category);
     final ended = bill.to != null && bill.to!.compareTo(now) < 0;
@@ -55,11 +51,11 @@ class BillRow extends StatelessWidget {
           ),
           title: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
             Text(bill.description, style: const TextStyle(fontSize: 15)),
-            if (bill.variable) _pill('Variável'),
-            if (bill.to != null) _pill('até ${cycleLabel(bill.to!).substring(0, 3).toLowerCase()}'),
+            if (bill.variable) _pill(app.s.variable),
+            if (bill.to != null) _pill(app.s.until(cycleLabel(bill.to!, app.lang).substring(0, 3))),
           ]),
           trailing: [
-            Text('${income ? '+' : ''}${fmtCents(bill.cents)}',
+            Text('${income ? '+' : ''}${app.money.amount(bill.cents)}',
                 style: mono(color: income ? Palette.accent : Palette.text)),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, size: 18, color: Palette.muted),
@@ -94,14 +90,6 @@ Future<void> showBillEditor(BuildContext context, {Recurring? bill}) {
 
 const _formMaxWidth = 460.0;
 
-/// Accepts "1.234,56", "1234,56", "35" and also "35.50" (dot as decimal point).
-int? parseAmount(String text) {
-  final t = text.replaceAll(RegExp(r'[\s€]'), '');
-  if (t.isEmpty) return null;
-  if (!t.contains(',') && RegExp(r'^\d+\.\d{1,2}$').hasMatch(t)) return parseMoney(t.replaceFirst('.', ','));
-  return parseMoney(t);
-}
-
 class _BillForm extends StatefulWidget {
   const _BillForm({this.bill});
   final Recurring? bill;
@@ -114,7 +102,7 @@ class _BillFormState extends State<_BillForm> {
   late final bool _isNew = widget.bill == null || widget.bill!.id.isEmpty;
   late final _desc = TextEditingController(text: widget.bill?.description ?? '');
   late final _amount = TextEditingController(
-      text: (widget.bill?.cents ?? 0) > 0 ? fmtCents(widget.bill!.cents) : '');
+      text: (widget.bill?.cents ?? 0) > 0 ? AppScope.of(context, listen: false).money.amount(widget.bill!.cents) : '');
   late String _cat = widget.bill?.category ?? 'Moradia';
   late int _day = widget.bill?.day ?? 1;
   late bool _variable = widget.bill?.variable ?? false;
@@ -129,10 +117,11 @@ class _BillFormState extends State<_BillForm> {
   }
 
   void _save(AppController app) {
+    final s = app.s;
     final desc = _desc.text.trim();
     final cents = parseAmount(_amount.text);
-    if (desc.isEmpty) return setState(() => _error = 'Indica uma descrição.');
-    if (cents == null || cents <= 0) return setState(() => _error = 'Indica um valor (ex.: 45,90).');
+    if (desc.isEmpty) return setState(() => _error = s.enterDescription);
+    if (cents == null || cents <= 0) return setState(() => _error = s.enterAmountExample);
     final m = app.model;
     final old = widget.bill;
     app.store.saveRecurring(
@@ -149,24 +138,23 @@ class _BillFormState extends State<_BillForm> {
       ),
       m.today,
     );
-    toast(context, _isNew ? 'Conta fixa adicionada' : 'Conta fixa atualizada');
+    toast(context, _isNew ? s.billAdded : s.billUpdated);
     Navigator.of(context).pop();
   }
 
   Future<void> _delete(AppController app) async {
-    if (!await confirm(context,
-        'Apagar "${widget.bill!.description}"? Os movimentos já pagos ficam; os previstos saem da previsão.', 'Apagar')) {
-      return;
-    }
+    final s = app.s;
+    if (!await confirm(context, s.deleteBillQ(widget.bill!.description), s.delete)) return;
     if (!mounted) return;
     app.store.removeRecurring(widget.bill!.id, app.today);
-    toast(context, 'Conta fixa apagada');
+    toast(context, s.billDeleted);
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
+    final s = app.s;
     final m = app.model;
     final now = cycleIdOf(m.today, m.state.config.cycleStartDay);
     final endOptions = {
@@ -190,29 +178,29 @@ class _BillFormState extends State<_BillForm> {
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          Text(_isNew ? 'Nova conta fixa' : 'Editar conta fixa',
+          Text(_isNew ? s.newBill : s.editBill,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
           const SizedBox(height: 16),
-          TextField(controller: _desc, textCapitalization: TextCapitalization.sentences, decoration: deco('Descrição', hint: 'Ex.: Renda')),
+          TextField(controller: _desc, textCapitalization: TextCapitalization.sentences, decoration: deco(s.description, hint: s.billHint)),
           const SizedBox(height: 12),
           TextField(
             controller: _amount,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: mono(size: 16),
-            decoration: deco(_variable ? 'Valor estimado' : 'Valor', suffix: '€', hint: '0,00'),
+            decoration: deco(_variable ? s.estimatedAmount : s.amount, suffix: app.money.symbol, hint: app.money.amount(0)),
           ),
           const SizedBox(height: 14),
-          const Lbl('Categoria'),
+          Lbl(s.categoryLabel),
           const SizedBox(height: 8),
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final c in m.state.categories)
-              PillChip(label: c.name, selected: _cat == c.name, onTap: () => setState(() => _cat = c.name)),
+              PillChip(label: s.category(c.name), selected: _cat == c.name, onTap: () => setState(() => _cat = c.name)),
           ]),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(
               child: InputDecorator(
-                decoration: deco('Dia do mês'),
+                decoration: deco(s.dayOfMonth),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
                     value: _day,
@@ -229,7 +217,7 @@ class _BillFormState extends State<_BillForm> {
             const SizedBox(width: 10),
             Expanded(
               child: InputDecorator(
-                decoration: deco('Termina'),
+                decoration: deco(s.ends),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String?>(
                     value: _to,
@@ -238,8 +226,9 @@ class _BillFormState extends State<_BillForm> {
                     dropdownColor: Palette.surface,
                     menuMaxHeight: 320,
                     items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('Sem fim')),
-                      for (final id in endOptions) DropdownMenuItem<String?>(value: id, child: Text(cycleLabel(id))),
+                      DropdownMenuItem<String?>(value: null, child: Text(s.noEnd)),
+                      for (final id in endOptions)
+                        DropdownMenuItem<String?>(value: id, child: Text(cycleLabel(id, app.lang))),
                     ],
                     onChanged: (v) => setState(() => _to = v),
                   ),
@@ -248,17 +237,16 @@ class _BillFormState extends State<_BillForm> {
             ),
           ]),
           if (_day > 28)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text('Nos meses mais curtos conta no último dia.', style: TextStyle(fontSize: 12, color: Palette.muted)),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(s.shortMonths, style: const TextStyle(fontSize: 12, color: Palette.muted)),
             ),
           SwitchListTile(
             value: _variable,
             onChanged: (v) => setState(() => _variable = v),
             contentPadding: EdgeInsets.zero,
-            title: const Text('O valor muda todos os meses', style: TextStyle(fontSize: 15)),
-            subtitle: const Text('Usa uma estimativa; ajusta quando souberes o valor.',
-                style: TextStyle(fontSize: 12, color: Palette.muted)),
+            title: Text(s.variableTitle, style: const TextStyle(fontSize: 15)),
+            subtitle: Text(s.variableSub, style: const TextStyle(fontSize: 12, color: Palette.muted)),
           ),
           if (_error != null)
             Padding(
@@ -271,19 +259,19 @@ class _BillFormState extends State<_BillForm> {
               TextButton(
                 onPressed: () => _delete(app),
                 style: TextButton.styleFrom(foregroundColor: Palette.neg),
-                child: const Text('Apagar'),
+                child: Text(s.delete),
               ),
             const Spacer(),
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               style: TextButton.styleFrom(foregroundColor: Palette.muted),
-              child: const Text('Cancelar'),
+              child: Text(s.cancel),
             ),
             const SizedBox(width: 8),
             FilledButton(
               onPressed: () => _save(app),
               style: FilledButton.styleFrom(backgroundColor: Palette.accent, foregroundColor: Palette.bg),
-              child: const Text('Guardar'),
+              child: Text(s.save),
             ),
           ]),
         ]),
@@ -298,9 +286,10 @@ class BillSuggestions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final have = AppScope.of(context).store.state.recurring.map((r) => r.description.toLowerCase()).toSet();
+    final app = AppScope.of(context);
+    final have = app.store.state.recurring.map((r) => r.description.toLowerCase()).toSet();
     return Wrap(spacing: 8, runSpacing: 8, children: [
-      for (final s in billSuggestions.where((s) => !have.contains(s.description.toLowerCase())))
+      for (final s in billSuggestions(app.s).where((s) => !have.contains(s.description.toLowerCase())))
         ActionChip(
           avatar: const Icon(Icons.add, size: 16),
           label: Text(s.description),
@@ -311,7 +300,7 @@ class BillSuggestions extends StatelessWidget {
         ),
       ActionChip(
         avatar: const Icon(Icons.add, size: 16, color: Palette.bg),
-        label: const Text('Outra', style: TextStyle(color: Palette.bg, fontWeight: FontWeight.w600)),
+        label: Text(app.s.otherBill, style: const TextStyle(color: Palette.bg, fontWeight: FontWeight.w600)),
         backgroundColor: Palette.accent,
         side: BorderSide.none,
         shape: const StadiumBorder(),

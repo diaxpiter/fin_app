@@ -68,25 +68,31 @@ List<String> cycleRange(String fromId, String toId) {
   return out;
 }
 
-const _months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const _weekdays = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const _months = {
+  'pt': ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'],
+  'en': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+};
+const _weekdays = {
+  'pt': ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'],
+  'en': ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+};
 
-String monthShort(int m) => _months[m - 1];
+String monthShort(int m, [String lang = 'pt']) => (_months[lang] ?? _months['en']!)[m - 1];
 
-String cycleLabel(String id) {
+String cycleLabel(String id, [String lang = 'pt']) {
   final e = _ym(id);
-  final s = _months[e.m - 1];
+  final s = monthShort(e.m, lang);
   return '${s[0].toUpperCase()}${s.substring(1)} ${e.y}';
 }
 
-String formatDay(String dateISO) {
+String formatDay(String dateISO, [String lang = 'pt']) {
   final p = parseISO(dateISO);
-  return '${p.d} ${monthShort(p.m)}';
+  return '${p.d} ${monthShort(p.m, lang)}';
 }
 
-String weekday(String dateISO) {
+String weekday(String dateISO, [String lang = 'pt']) {
   final p = parseISO(dateISO);
-  return _weekdays[DateTime.utc(p.y, p.m, p.d).weekday % 7];
+  return (_weekdays[lang] ?? _weekdays['en']!)[DateTime.utc(p.y, p.m, p.d).weekday % 7];
 }
 
 // ---- Money ------------------------------------------------------------

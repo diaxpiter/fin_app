@@ -81,14 +81,34 @@ class Movement {
 }
 
 class Config {
-  const Config({required this.cycleStartDay, required this.openingBalance});
+  const Config({required this.cycleStartDay, required this.openingBalance, this.language, this.currency = 'EUR'});
   final int cycleStartDay, openingBalance;
+
+  /// 'pt' / 'en'; null follows the device language.
+  final String? language;
+
+  /// ISO 4217 code, e.g. 'EUR'.
+  final String currency;
+
+  Config copyWith({int? cycleStartDay, String? language, bool clearLanguage = false, String? currency}) => Config(
+        cycleStartDay: cycleStartDay ?? this.cycleStartDay,
+        openingBalance: openingBalance,
+        language: clearLanguage ? null : (language ?? this.language),
+        currency: currency ?? this.currency,
+      );
 
   factory Config.fromJson(Map<String, dynamic> j) => Config(
         cycleStartDay: (j['cycleStartDay'] as num).toInt(),
         openingBalance: (j['openingBalance'] as num).toInt(),
+        language: j['language'] as String?,
+        currency: (j['currency'] as String?) ?? 'EUR',
       );
-  Map<String, dynamic> toJson() => {'cycleStartDay': cycleStartDay, 'openingBalance': openingBalance};
+  Map<String, dynamic> toJson() => {
+        'cycleStartDay': cycleStartDay,
+        'openingBalance': openingBalance,
+        if (language != null) 'language': language,
+        'currency': currency,
+      };
 }
 
 class AppState {
@@ -105,7 +125,7 @@ class AppState {
   factory AppState.fromJson(Object? json) {
     if (json is! Map || json['version'] != 1 || json['config'] is! Map ||
         json['categories'] is! List || json['recurring'] is! List || json['movements'] is! List) {
-      throw const FormatException('Ficheiro inválido.');
+      throw const FormatException('invalid backup');
     }
     try {
       return AppState(
@@ -115,7 +135,7 @@ class AppState {
         movements: _list(json['movements']).map(Movement.fromJson).toList(),
       );
     } catch (_) {
-      throw const FormatException('Ficheiro inválido.');
+      throw const FormatException('invalid backup');
     }
   }
 

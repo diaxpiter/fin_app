@@ -68,28 +68,33 @@ class BigAmount extends StatelessWidget {
   final Alignment alignment;
 
   @override
-  Widget build(BuildContext context) => FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: alignment,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(fmtCents(cents),
-                style: TextStyle(
-                  fontSize: size,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -size * 0.045,
-                  height: 1,
-                  color: color,
-                  fontFeatures: mono().fontFeatures,
-                )),
-            const SizedBox(width: 6),
-            Text('€', style: TextStyle(fontSize: size * 0.38, fontWeight: FontWeight.w500, color: Palette.muted)),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final money = AppScope.of(context).money;
+    final symbol = Text(money.symbol,
+        style: TextStyle(fontSize: size * 0.38, fontWeight: FontWeight.w500, color: Palette.muted));
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: alignment,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          if (money.symbolFirst) ...[symbol, const SizedBox(width: 6)],
+          Text(money.amount(cents),
+              style: TextStyle(
+                fontSize: size,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -size * 0.045,
+                height: 1,
+                color: color,
+                fontFeatures: mono().fontFeatures,
+              )),
+          if (!money.symbolFirst) ...[const SizedBox(width: 6), symbol],
+        ],
+      ),
+    );
+  }
 }
 
 class PillChip extends StatelessWidget {
@@ -123,16 +128,19 @@ class CyclePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = AppScope.of(context, listen: false);
+    final app = AppScope.of(context);
+    final lang = app.lang;
     return PopupMenuButton<String>(
-      tooltip: 'Escolher ciclo',
+      tooltip: app.s.chooseCycle,
       initialValue: m.cycle.id,
       onSelected: app.pickCycle,
       color: Palette.surface,
       constraints: const BoxConstraints(maxHeight: 420),
       itemBuilder: (_) => [
         for (final c in m.cycles)
-          PopupMenuItem(value: c.id, child: Text('${c.label} · ${formatDay(c.start)} – ${formatDay(c.end)}')),
+          PopupMenuItem(
+              value: c.id,
+              child: Text('${cycleLabel(c.id, lang)} · ${formatDay(c.start, lang)} – ${formatDay(c.end, lang)}')),
       ],
       child: Container(
         height: 36,
@@ -143,7 +151,7 @@ class CyclePicker extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text('${formatDay(m.cycle.start)} – ${formatDay(m.cycle.end)}', style: mono(size: 13)),
+          Text('${formatDay(m.cycle.start, lang)} – ${formatDay(m.cycle.end, lang)}', style: mono(size: 13)),
           const SizedBox(width: 8),
           const Icon(Icons.expand_more, size: 16, color: Palette.muted),
         ]),
@@ -161,6 +169,7 @@ class MovementRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppScope.of(context);
     final income = m.isIncome(mv.category);
     final paid = mv.estado == 'Pago';
     return InkWell(
@@ -176,15 +185,15 @@ class MovementRow extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(mv.description, style: const TextStyle(fontSize: 15), overflow: TextOverflow.ellipsis),
               const SizedBox(height: 3),
-              Text(mv.category, style: const TextStyle(fontSize: 12, color: Palette.muted)),
+              Text(app.s.category(mv.category), style: const TextStyle(fontSize: 12, color: Palette.muted)),
             ]),
           ),
           const SizedBox(width: 12),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('${income ? '+' : '−'}${fmtCents(mv.cents)}',
+            Text('${income ? '+' : '−'}${app.money.amount(mv.cents)}',
                 style: mono(color: income ? Palette.accent : Palette.text)),
             const SizedBox(height: 3),
-            Text(paid ? 'PAGO' : 'PREVISTO',
+            Text(app.s.estado(mv.estado).toUpperCase(),
                 style: mono(size: 11, weight: FontWeight.w500, color: paid ? Palette.muted : Palette.warn)
                     .copyWith(letterSpacing: 0.4)),
           ]),
@@ -216,6 +225,7 @@ enum _Act { toggle, delete }
 
 Future<void> showMovementActions(BuildContext context, Movement mv) async {
   final app = AppScope.of(context, listen: false);
+  final s = app.s;
   final income = app.model.isIncome(mv.category);
   final compact = sizeClassOf(context) == SizeClass.compact;
 
@@ -238,16 +248,18 @@ Future<void> showMovementActions(BuildContext context, Movement mv) async {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(mv.description, style: const TextStyle(fontSize: 15)),
             const SizedBox(height: 3),
-            Text('${mv.category} · ${formatDay(mv.date)} · ${income ? '+' : '−'}${fmtCents(mv.cents)} €',
+            Text(
+                '${s.category(mv.category)} · ${formatDay(mv.date, app.lang)} · '
+                '${app.money.full(income ? mv.cents : -mv.cents, sign: true)}',
                 style: const TextStyle(fontSize: 12, color: Palette.muted)),
           ]),
         ),
         btn(
-          mv.estado == 'Pago' ? 'Marcar como previsto' : (income ? 'Marcar como recebido' : 'Marcar como pago'),
+          mv.estado == 'Pago' ? s.markPlanned : (income ? s.markReceived : s.markPaid),
           () => Navigator.pop(ctx, _Act.toggle),
         ),
-        btn('Apagar', () => Navigator.pop(ctx, _Act.delete), color: Palette.neg),
-        btn('Fechar', () => Navigator.pop(ctx), color: Palette.muted, last: true),
+        btn(s.delete, () => Navigator.pop(ctx, _Act.delete), color: Palette.neg),
+        btn(s.close, () => Navigator.pop(ctx), color: Palette.muted, last: true),
       ]),
     );
   }
@@ -272,20 +284,21 @@ Future<void> showMovementActions(BuildContext context, Movement mv) async {
     case _Act.toggle:
       app.store.setEstado(mv.id, mv.estado == 'Pago' ? 'Previsto' : 'Pago');
     case _Act.delete:
-      if (await confirm(context, 'Apagar este movimento?', 'Apagar')) app.store.removeMovement(mv.id);
+      if (await confirm(context, s.deleteMovementQ, s.delete)) app.store.removeMovement(mv.id);
     case null:
       break;
   }
 }
 
 Future<bool> confirm(BuildContext context, String question, String action) async {
+  final cancel = AppScope.of(context, listen: false).s.cancel;
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: Palette.surface,
       content: Text(question),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(cancel)),
         TextButton(
           onPressed: () => Navigator.pop(ctx, true),
           style: TextButton.styleFrom(foregroundColor: Palette.neg),

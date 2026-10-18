@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'i18n.dart';
 import 'logic.dart';
 import 'models.dart';
 import 'store.dart';
@@ -36,6 +37,19 @@ class AppController extends ChangeNotifier {
   int tab = 0;
 
   String get today => todayISO(_clock());
+
+  /// Device language, used until the user picks one. Tests can override it.
+  String deviceLanguage = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+
+  String get lang => resolveLanguage(store.state.config.language, deviceLanguage);
+  S get s => S(lang);
+
+  Money? _money;
+  Money get money {
+    final cur = store.state.config.currency;
+    if (_money == null || _money!.language != lang || _money!.currency != cur) _money = Money(lang, cur);
+    return _money!;
+  }
 
   Model get model {
     final state = store.state;
