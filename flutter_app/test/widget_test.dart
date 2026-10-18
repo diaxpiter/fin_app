@@ -22,6 +22,8 @@ Future<void> pumpAt(WidgetTester tester, Size size) async {
 }
 
 void main() {
+  group('bills', billTests);
+
   const sizes = {
     'small phone': Size(320, 640),
     'phone': Size(390, 844),
@@ -54,4 +56,20 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+}
+
+void billTests() {
+  testWidgets('add a fixed bill from Fixas (dot as decimal point)', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.repeat).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nova'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Descrição'), 'Seguro');
+    await tester.enterText(find.widgetWithText(TextField, 'Valor'), '25.50');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Seguro'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -15,6 +15,7 @@ import 'src/screens/fixas.dart';
 import 'src/screens/home.dart';
 import 'src/screens/movimentos.dart';
 import 'src/screens/nova.dart';
+import 'src/screens/onboarding.dart';
 import 'src/screens/previsao.dart';
 import 'src/store.dart';
 import 'src/theme.dart';
@@ -36,6 +37,7 @@ Future<void> main() async {
   } catch (_) {/* accounts unavailable: the app still works on-device */}
   final account = AccountController(store: store, backend: backend, prefs: prefs);
   await account.init();
+  store.ensureRecurring(); // bills roll into the forecast as months pass
   runApp(FinApp(controller: AppController(store), account: account));
 }
 
@@ -95,6 +97,7 @@ class _AccountGateState extends State<AccountGate> {
       AccountStatus.signedOut => const AuthScreen(),
       AccountStatus.setup => const SetupScreen(),
       AccountStatus.recovering => const RecoveryScreen(),
+      AccountStatus.unlocked when account.needsOnboarding => const OnboardingScreen(),
       AccountStatus.guest || AccountStatus.unlocked => const Shell(),
     };
   }

@@ -139,6 +139,48 @@ List<Movement> expandRecurring(List<Recurring> recurring, List<String> cycleIds,
   return out;
 }
 
+// Fixed bills are materialised as planned movements this many cycles ahead
+// (the current one included), so they show up in Movimentos and Previsão.
+const recurringHorizon = 12;
+
+String? _genCycle(Movement m) => m.gen ? m.id.substring(m.id.lastIndexOf(':') + 1) : null;
+String? _genRecurringId(Movement m) => m.gen ? m.id.split(':')[1] : null;
+
+/// Brings the planned movements in line with the fixed bills, from today's
+/// cycle up to [recurringHorizon] cycles ahead. Returns null when nothing changed.
+///
+/// - Missing occurrences are added; existing ones are left alone (so a value
+///   the user changed, or a movement marked Pago, is never overwritten).
+/// - Bills in [regenerate] first lose their future occurrences that are still
+///   Previsto (use it after editing or deleting a bill, or changing the start day).
+/// - A cycle that already has a movement with the same description and
+///   category (e.g. typed in by hand) doesn't get a duplicate.
+List<Movement>? syncRecurring(AppState state, String today, {Set<String> regenerate = const {}}) {
+  final s = state.config.cycleStartDay;
+  final cur = cycleIdOf(today, s);
+  var changed = false;
+
+  final movements = state.movements.where((m) {
+    final rid = _genRecurringId(m);
+    final drop = rid != null &&
+        regenerate.contains(rid) &&
+        m.estado == 'Previsto' &&
+        _genCycle(m)!.compareTo(cur) >= 0;
+    if (drop) changed = true;
+    return !drop;
+  }).toList();
+
+  final ids = movements.map((m) => m.id).toSet();
+  final seen = <String>{for (final m in movements) '${cycleIdOf(m.date, s)}|${m.description}|${m.category}'};
+  final added = expandRecurring(state.recurring, cycleRange(cur, nextCycleId(cur, recurringHorizon - 1)), s)
+      .where((m) => !ids.contains(m.id) && !seen.contains('${cycleIdOf(m.date, s)}|${m.description}|${m.category}'));
+  for (final m in added) {
+    movements.add(m);
+    changed = true;
+  }
+  return changed ? movements : null;
+}
+
 // ---- Totals -----------------------------------------------------------
 
 Map<String, String> typesOf(AppState s) => {for (final c in s.categories) c.name: c.type};

@@ -56,6 +56,7 @@ class AccountController extends ChangeNotifier {
   final int iterations;
 
   static const _kMode = 'account_mode', _kKey = 'account_key', _kVersion = 'account_version', _kDirty = 'account_dirty';
+  static const _kOnboarding = 'account_onboarding';
 
   AccountStatus status = AccountStatus.signedOut;
   SyncState sync = SyncState.idle;
@@ -76,6 +77,14 @@ class AccountController extends ChangeNotifier {
 
   /// True when this device was used without an account before (offer to keep that data).
   bool get wasGuest => _prefs?.getString(_kMode) == 'guest';
+
+  /// A brand-new account still has to go through the fixed-bills step.
+  bool get needsOnboarding => status == AccountStatus.unlocked && (_prefs?.getBool(_kOnboarding) ?? false);
+
+  Future<void> finishOnboarding() async {
+    await _prefs?.remove(_kOnboarding);
+    notifyListeners();
+  }
 
   /// A one-off message for the user (e.g. a sync conflict). Reading clears it.
   String? takeNotice() {
@@ -186,6 +195,7 @@ class AccountController extends ChangeNotifier {
     await _need().createVault(row);
     _pendingKeys = null;
     recoveryKey = null;
+    await _prefs?.setBool(_kOnboarding, true);
     await _unlock(dk, row);
   }
 
@@ -200,6 +210,7 @@ class AccountController extends ChangeNotifier {
     _apply(state);
     status = AccountStatus.unlocked;
     sync = SyncState.idle;
+    store.ensureRecurring(); // roll the bills forward to this month (syncs if anything was added)
     notifyListeners();
   }
 
@@ -266,6 +277,7 @@ class AccountController extends ChangeNotifier {
     await _prefs?.remove(_kVersion);
     await _prefs?.remove(_kDirty);
     await _prefs?.remove(_kMode);
+    await _prefs?.remove(_kOnboarding);
     _apply(emptyState());
   }
 

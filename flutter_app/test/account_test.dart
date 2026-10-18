@@ -85,6 +85,17 @@ void main() {
       final a = await signedUp(server);
       await a.finishSetup(keepDeviceData: false);
       expect(a.store.state.movements, isEmpty);
+      expect(a.needsOnboarding, isTrue, reason: 'new account asks for fixed bills');
+      await a.finishOnboarding();
+      expect(a.needsOnboarding, isFalse);
+    });
+
+    test('signing in to an existing account skips onboarding', () async {
+      final server = FakeServer();
+      await (await signedUp(server)).finishSetup(keepDeviceData: false);
+      final (b, _, _) = await device(server);
+      await b.signIn(email, password);
+      expect(b.needsOnboarding, isFalse);
     });
 
     test('second device signs in and sees the same data; edits sync both ways', () async {

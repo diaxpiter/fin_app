@@ -1,6 +1,6 @@
 // Persistence: one JSON document in shared_preferences (localStorage on web,
 // NSUserDefaults on iOS, SharedPreferences on Android, a file on desktop).
-// Data never leaves the device. Swap this class to change the backend.
+// With an account, AccountController also syncs it, encrypted (account.dart).
 
 import 'dart:convert';
 import 'dart:math';
@@ -8,6 +8,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'logic.dart';
 import 'models.dart';
 import 'seed.dart';
 
@@ -90,6 +91,45 @@ class Store extends ChangeNotifier {
 
   void setStartDay(int day) {
     _state.config = Config(cycleStartDay: day, openingBalance: _state.config.openingBalance);
+    // planned bills move to the new cycles
+    _state.movements = syncRecurring(_state, todayISO(), regenerate: _state.recurring.map((r) => r.id).toSet()) ??
+        _state.movements;
+    _commit();
+  }
+
+  // ---- fixed bills ----
+
+  /// Adds any planned bill occurrences that are missing (e.g. a new month came
+  /// into the forecast window). Saves only when something changed.
+  void ensureRecurring([String? today]) {
+    final next = syncRecurring(_state, today ?? todayISO());
+    if (next == null) return;
+    _state.movements = next;
+    _commit();
+  }
+
+  static String newRecurringId() =>
+      'r${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${_rand.nextInt(1 << 16).toRadixString(36)}';
+
+  /// Adds or replaces (same id) a fixed bill and updates its planned movements.
+  void saveRecurring(Recurring r, [String? today]) {
+    final i = _state.recurring.indexWhere((x) => x.id == r.id);
+    final list = [..._state.recurring];
+    if (i >= 0) {
+      list[i] = r;
+    } else {
+      list.add(r);
+    }
+    _setRecurring(list, r.id, today);
+  }
+
+  /// Deletes a fixed bill and its future planned movements (past and paid ones stay).
+  void removeRecurring(String id, [String? today]) =>
+      _setRecurring(_state.recurring.where((r) => r.id != id).toList(), id, today);
+
+  void _setRecurring(List<Recurring> list, String changedId, String? today) {
+    _state = AppState(config: _state.config, categories: _state.categories, recurring: list, movements: _state.movements);
+    _state.movements = syncRecurring(_state, today ?? todayISO(), regenerate: {changedId}) ?? _state.movements;
     _commit();
   }
 

@@ -1,10 +1,13 @@
 // Same checks as ../../test/logic.test.mjs: the cycle maths must match the Google Sheet.
 
 import 'package:fin_app/src/logic.dart';
+import 'package:fin_app/src/models.dart';
 import 'package:fin_app/src/seed.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('fixed bills', recurringTests);
+
   test('cycle ids and bounds (start day 23)', () {
     expect(cycleIdOf('2026-10-23', 23), '2026-11');
     expect(cycleIdOf('2026-11-22', 23), '2026-11');
@@ -68,5 +71,57 @@ void main() {
     final cycles = computeCycles(seedState(), '2026-10-16');
     expect(cycles.first.id, '2026-10');
     expect(cycles.first.items, isEmpty);
+  });
+}
+
+void recurringTests() {
+  Recurring bill({String id = 'b', int cents = 1000, int day = 5, String? from, String? to}) =>
+      Recurring(id: id, description: 'Renda', category: 'Moradia', cents: cents, day: day, from: from, to: to);
+
+  AppState blank(List<Recurring> rec) => AppState(
+      config: const Config(cycleStartDay: 1, openingBalance: 0), categories: [...categories], recurring: rec, movements: []);
+
+  test('the example data needs no changes (no duplicates of hand-entered bills)', () {
+    expect(syncRecurring(seedState(), '2026-10-18'), isNull);
+  });
+
+  test('a bill fills the current cycle and the next ones', () {
+    final s = blank([bill()]);
+    final out = syncRecurring(s, '2026-11-10')!;
+    expect(out, hasLength(recurringHorizon));
+    expect(out.first.date, '2026-11-05');
+    expect(out.last.date, '2027-10-05');
+    expect(syncRecurring(s..movements = out, '2026-11-10'), isNull, reason: 'idempotent');
+  });
+
+  test('from / to limit the cycles', () {
+    final out = syncRecurring(blank([bill(from: '2027-01', to: '2027-03')]), '2026-11-10')!;
+    expect(out.map((m) => m.date), ['2027-01-05', '2027-02-05', '2027-03-05']);
+  });
+
+  test('editing regenerates future planned occurrences but keeps paid ones and past cycles', () {
+    final s = blank([bill()]);
+    s.movements = syncRecurring(s, '2026-11-10')!;
+    s.movements.firstWhere((m) => m.date == '2026-12-05').estado = 'Pago';
+    final edited = AppState(config: s.config, categories: s.categories, recurring: [bill(cents: 2000)], movements: s.movements);
+    final out = syncRecurring(edited, '2026-11-10', regenerate: {'b'})!;
+    expect(out.firstWhere((m) => m.date == '2026-12-05').cents, 1000, reason: 'paid stays');
+    expect(out.firstWhere((m) => m.date == '2027-01-05').cents, 2000);
+    expect(out, hasLength(recurringHorizon));
+  });
+
+  test('deleting a bill removes only its future planned movements', () {
+    final s = blank([bill()]);
+    s.movements = syncRecurring(s, '2026-11-10')!;
+    s.movements.first.estado = 'Pago';
+    final gone = AppState(config: s.config, categories: s.categories, recurring: [], movements: s.movements);
+    expect(syncRecurring(gone, '2026-11-10', regenerate: {'b'})!.single.estado, 'Pago');
+  });
+
+  test('a movement typed in by hand is not duplicated by the bill', () {
+    final s = blank([bill()]);
+    s.movements = [Movement(id: 'm1', date: '2026-11-07', description: 'Renda', category: 'Moradia', cents: 990, estado: 'Pago')];
+    final out = syncRecurring(s, '2026-11-10')!;
+    expect(out.where((m) => cycleIdOf(m.date, 1) == '2026-11'), hasLength(1));
   });
 }

@@ -10,9 +10,10 @@ import '../theme.dart';
 import '../widgets.dart';
 
 /// Centred, width-capped column used by all account screens.
-class _AuthFrame extends StatelessWidget {
-  const _AuthFrame({required this.children});
+class AuthFrame extends StatelessWidget {
+  const AuthFrame({super.key, required this.children, this.maxWidth = 420});
   final List<Widget> children;
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -21,7 +22,7 @@ class _AuthFrame extends StatelessWidget {
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
+                constraints: BoxConstraints(maxWidth: maxWidth),
                 child: AutofillGroup(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
                 ),
@@ -201,7 +202,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _Mode.signUp => ('Criar conta', 'Criar conta'),
       _Mode.forgot => ('Recuperar acesso', 'Enviar email'),
     };
-    return _AuthFrame(children: [
+    return AuthFrame(children: [
       const Lbl('Painel Financeiro'),
       const SizedBox(height: 12),
       H1(title),
@@ -296,7 +297,7 @@ class _SetupScreenState extends State<SetupScreen> {
     final account = AccountScope.of(context);
     final key = account.recoveryKey ?? '';
     _keep ??= account.wasGuest;
-    return _AuthFrame(children: [
+    return AuthFrame(children: [
       const Lbl('Último passo'),
       const SizedBox(height: 12),
       const H1('A tua chave de recuperação', size: 26),
@@ -391,7 +392,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   @override
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
-    return _AuthFrame(children: [
+    return AuthFrame(children: [
       Lbl(account.email ?? 'Recuperar acesso'),
       const SizedBox(height: 12),
       const H1('Nova palavra-passe', size: 26),

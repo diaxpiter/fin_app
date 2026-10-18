@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
+import '../layout.dart';
 import '../logic.dart';
 import '../theme.dart';
 import '../widgets.dart';
-import '../layout.dart';
+import 'bills.dart';
 
 class FixasScreen extends StatelessWidget {
   const FixasScreen({super.key});
@@ -30,18 +31,19 @@ class FixasScreen extends StatelessWidget {
           ]),
         );
 
-    Widget pill(String text) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(border: Border.all(color: Palette.line2), borderRadius: BorderRadius.circular(6)),
-          child: Text(text.toUpperCase(),
-              style: mono(size: 10, weight: FontWeight.w500, color: Palette.muted).copyWith(letterSpacing: 0.4)),
-        );
-
     return ScreenList(
       maxWidth: 760,
       bottom: 32,
       children: [
-        const TopRow(children: [H1('Contas fixas')]),
+        TopRow(children: [
+          const H1('Contas fixas'),
+          FilledButton.icon(
+            onPressed: () => showBillEditor(context),
+            style: FilledButton.styleFrom(backgroundColor: Palette.accent, foregroundColor: Palette.bg),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Nova'),
+          ),
+        ]),
         const SizedBox(height: 24),
         Container(
           decoration: const BoxDecoration(
@@ -56,33 +58,20 @@ class FixasScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        const Lbl('Por dia do mês'),
-        const SizedBox(height: 6),
-        for (final r in rec)
-          Opacity(
-            opacity: r.to != null && r.to!.compareTo(now) < 0 ? 0.45 : 1,
-            child: InfoRow(
-              leading: Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    border: Border.all(color: Palette.surface2), borderRadius: BorderRadius.circular(8)),
-                child: Text('${r.day}', style: mono(size: 13, color: Palette.soft)),
-              ),
-              title: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                Text(r.description, style: const TextStyle(fontSize: 15)),
-                if (r.variable) pill('Variável'),
-                if (r.to != null) pill('até ${cycleLabel(r.to!).substring(0, 3).toLowerCase()}'),
-              ]),
-              trailing: [
-                Text('${m.isIncome(r.category) ? '+' : ''}${fmtCents(r.cents)}',
-                    style: mono(color: m.isIncome(r.category) ? Palette.accent : Palette.text)),
-              ],
-            ),
-          ),
+        if (rec.isEmpty) ...[
+          const Text('Ainda não tens contas fixas. Começa pelo salário e pelas contas da casa:',
+              style: TextStyle(fontSize: 14, height: 1.45, color: Palette.muted)),
+          const SizedBox(height: 14),
+          const BillSuggestions(),
+        ] else ...[
+          const Lbl('Por dia do mês'),
+          const SizedBox(height: 6),
+          for (final r in rec) BillRow(r),
+        ],
         const SizedBox(height: 24),
-        const Text('Por agora as contas fixas só se consultam. Editá-las vem na próxima versão.',
+        const Text(
+            'As contas fixas aparecem como previstas nos próximos $recurringHorizon ciclos. '
+            'Alterar uma conta muda só os movimentos que ainda estão previstos; os já pagos ficam como estão.',
             style: TextStyle(fontSize: 12, height: 1.5, color: Palette.muted)),
       ],
     );
