@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
+import '../holidays.dart';
 import '../i18n.dart';
 import '../theme.dart';
 
@@ -92,6 +93,22 @@ class CurrencyPicker extends StatelessWidget {
       ],
       onChanged: (v) {
         if (v != null) app.store.setCurrency(v);
+      },
+    );
+  }
+}
+
+class HolidaysPicker extends StatelessWidget {
+  const HolidaysPicker({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return _Box<String>(
+      value: app.store.state.config.holidays,
+      items: [for (final c in holidayCountries) DropdownMenuItem(value: c, child: Text(app.s.holidayName(c)))],
+      onChanged: (v) {
+        if (v != null) app.store.setHolidays(v);
       },
     );
   }

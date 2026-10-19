@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
+import '../holidays.dart';
 import '../i18n.dart';
 import '../layout.dart';
 import '../logic.dart';
@@ -15,7 +16,16 @@ import '../widgets.dart';
 /// Common bills offered as one-tap starting points (amount and day still to fill in).
 List<Recurring> billSuggestions(S s) => [
       for (final (category, name, variable) in s.billSuggestions)
-        Recurring(id: '', description: name, category: category, cents: 0, day: 1, variable: variable),
+        Recurring(
+          id: '',
+          description: name,
+          category: category,
+          cents: 0,
+          day: 1,
+          variable: variable,
+          // salaries are usually paid the business day before a weekend or holiday
+          shift: category == 'Receita' ? DayShift.before : DayShift.none,
+        ),
     ];
 
 Widget _pill(String text) => Container(
@@ -52,6 +62,7 @@ class BillRow extends StatelessWidget {
           title: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
             Text(bill.description, style: const TextStyle(fontSize: 15)),
             if (bill.variable) _pill(app.s.variable),
+            if (bill.shift != DayShift.none) _pill(app.s.shift(bill.shift)),
             if (bill.to != null) _pill(app.s.until(cycleLabel(bill.to!, app.lang).substring(0, 3))),
           ]),
           trailing: [
@@ -107,6 +118,7 @@ class _BillFormState extends State<_BillForm> {
   late int _day = widget.bill?.day ?? 1;
   late bool _variable = widget.bill?.variable ?? false;
   late String? _to = widget.bill?.to;
+  late DayShift _shift = widget.bill?.shift ?? DayShift.none;
   String? _error;
 
   @override
@@ -135,11 +147,24 @@ class _BillFormState extends State<_BillForm> {
         // a new bill starts in the current cycle; it never fills past months
         from: _isNew ? cycleIdOf(m.today, m.state.config.cycleStartDay) : old!.from,
         to: _to,
+        shift: _shift,
       ),
       m.today,
     );
     toast(context, _isNew ? s.billAdded : s.billUpdated);
     Navigator.of(context).pop();
+  }
+
+  /// When the bill will next fall, with the weekend/holiday rule applied, e.g. "sexta, 23 out".
+  String _nextDate(Model m) {
+    final lang = AppScope.of(context, listen: false).lang;
+    final start = m.state.config.cycleStartDay;
+    var cycle = cycleIdOf(m.today, start);
+    for (var i = 0; i < 3; i++, cycle = nextCycleId(cycle)) {
+      final d = shiftToBusinessDay(occurrenceDate(_day, cycle, start), _shift, m.state.config.holidays);
+      if (d.compareTo(m.today) >= 0) return '${weekday(d, lang)}, ${formatDay(d, lang)}';
+    }
+    return '';
   }
 
   Future<void> _delete(AppController app) async {
@@ -241,6 +266,24 @@ class _BillFormState extends State<_BillForm> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(s.shortMonths, style: const TextStyle(fontSize: 12, color: Palette.muted)),
             ),
+          const SizedBox(height: 12),
+          InputDecorator(
+            decoration: deco(s.weekendRule),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<DayShift>(
+                value: _shift,
+                isDense: true,
+                isExpanded: true,
+                dropdownColor: Palette.surface,
+                items: [for (final d in DayShift.values) DropdownMenuItem(value: d, child: Text(s.shift(d)))],
+                onChanged: (v) => setState(() => _shift = v ?? _shift),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(s.nextOn(_nextDate(m)), style: const TextStyle(fontSize: 12, color: Palette.muted)),
+          ),
           SwitchListTile(
             value: _variable,
             onChanged: (v) => setState(() => _variable = v),

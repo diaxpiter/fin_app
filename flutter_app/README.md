@@ -26,6 +26,11 @@ Breakpoints live in `lib/src/layout.dart`.
   ones and past cycles stay as they are, and a movement typed in by hand isn't duplicated.
   A new account's first login asks for them, along with language, currency and the day
   the month starts.
+- **Weekends and holidays**: each bill can keep its day, or move to the previous or next
+  business day (e.g. salary on the 25th, or the business day before). Portugal's 13
+  national holidays are built in, Easter-based ones included (`lib/src/holidays.dart`);
+  Ajustes → Feriados can switch to weekends only. A salary paid early, before the cycle
+  starts, still counts in its own cycle.
 - **Language**: Português or English (`lib/src/i18n.dart`, both side by side). Until the
   user picks one it follows the device. Default category names are stored in Portuguese
   and shown translated.

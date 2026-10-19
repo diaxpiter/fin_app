@@ -2,6 +2,7 @@
 // Port of ../src/logic.js — keep the two in sync. Tested in test/logic_test.dart.
 // Money is handled in integer cents to avoid floating-point drift.
 
+import 'holidays.dart';
 import 'models.dart';
 
 String pad(int n) => n.toString().padLeft(2, '0');
@@ -122,18 +123,22 @@ String occurrenceDate(int day, String cycleId, int startDay) {
   return iso(t.y, t.m, d);
 }
 
-// `overrides` maps "recId:cycleId" -> cents.
+// `overrides` maps "recId:cycleId" -> cents. Bills with a [DayShift] move off
+// weekends and [holidays] ('PT', or 'none' for weekends only).
 List<Movement> expandRecurring(List<Recurring> recurring, List<String> cycleIds, int startDay,
-    [Map<String, int> overrides = const {}]) {
+    [Map<String, int> overrides = const {}, String holidays = 'PT']) {
   final out = <Movement>[];
   for (final cycleId in cycleIds) {
     for (final r in recurring) {
       if (r.from != null && cycleId.compareTo(r.from!) < 0) continue;
       if (r.to != null && cycleId.compareTo(r.to!) > 0) continue;
       final key = '${r.id}:$cycleId';
+      final date = shiftToBusinessDay(occurrenceDate(r.day, cycleId, startDay), r.shift, holidays);
       out.add(Movement(
         id: 'gen:$key',
-        date: occurrenceDate(r.day, cycleId, startDay),
+        date: date,
+        // moved across the cycle boundary (e.g. paid early): still counts in its own cycle
+        cycle: cycleIdOf(date, startDay) == cycleId ? null : cycleId,
         description: r.description,
         category: r.category,
         cents: overrides[key] ?? r.cents,
@@ -177,9 +182,11 @@ List<Movement>? syncRecurring(AppState state, String today, {Set<String> regener
   }).toList();
 
   final ids = movements.map((m) => m.id).toSet();
-  final seen = <String>{for (final m in movements) '${cycleIdOf(m.date, s)}|${m.description}|${m.category}'};
-  final added = expandRecurring(state.recurring, cycleRange(cur, nextCycleId(cur, recurringHorizon - 1)), s)
-      .where((m) => !ids.contains(m.id) && !seen.contains('${cycleIdOf(m.date, s)}|${m.description}|${m.category}'));
+  String key(Movement m) => '${cycleOfMovement(m, s)}|${m.description}|${m.category}';
+  final seen = movements.map(key).toSet();
+  final added = expandRecurring(state.recurring, cycleRange(cur, nextCycleId(cur, recurringHorizon - 1)), s, const {},
+          state.config.holidays)
+      .where((m) => !ids.contains(m.id) && !seen.contains(key(m)));
   for (final m in added) {
     movements.add(m);
     changed = true;
@@ -188,6 +195,9 @@ List<Movement>? syncRecurring(AppState state, String today, {Set<String> regener
 }
 
 // ---- Totals -----------------------------------------------------------
+
+/// The cycle a movement counts in: its own date's, unless it was moved across a boundary.
+String cycleOfMovement(Movement m, int startDay) => m.cycle ?? cycleIdOf(m.date, startDay);
 
 Map<String, String> typesOf(AppState s) => {for (final c in s.categories) c.name: c.type};
 bool _isIncome(Movement m, Map<String, String> types) => types[m.category] == 'Entrada';
@@ -223,13 +233,13 @@ List<Cycle> computeCycles(AppState state, [String? today]) {
   final s = state.config.cycleStartDay;
   final types = typesOf(state);
 
-  final ids = {cycleIdOf(today ?? todayISO(), s), for (final m in state.movements) cycleIdOf(m.date, s)};
+  final ids = {cycleIdOf(today ?? todayISO(), s), for (final m in state.movements) cycleOfMovement(m, s)};
   final sorted = ids.toList()..sort();
   final all = cycleRange(sorted.first, sorted.last);
 
   final byCycle = {for (final id in all) id: <Movement>[]};
   for (final m in state.movements) {
-    byCycle[cycleIdOf(m.date, s)]!.add(m);
+    byCycle[cycleOfMovement(m, s)]!.add(m);
   }
 
   var balance = state.config.openingBalance;

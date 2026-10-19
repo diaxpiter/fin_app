@@ -78,6 +78,7 @@ class AjustesScreen extends StatelessWidget {
         PrefRow(label: s.language, child: const LanguagePicker()),
         PrefRow(label: s.currency, child: const CurrencyPicker()),
         PrefRow(label: s.startDay, hint: s.startDayHint, child: const StartDayPicker()),
+        PrefRow(label: s.holidays, hint: s.holidaysHint, child: const HolidaysPicker()),
         section(s.data),
         Container(height: 1, color: Palette.line),
         row(s.exportData, s.exportSub, onTap: () async {

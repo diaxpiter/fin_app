@@ -5,6 +5,7 @@
 import 'package:intl/intl.dart';
 
 import 'backend.dart';
+import 'models.dart' show DayShift;
 
 const languages = {'pt': 'Português', 'en': 'English'};
 
@@ -192,6 +193,20 @@ class S {
   String deleteBillQ(String name) => _t('Apagar "$name"? Os movimentos já pagos ficam; os previstos saem da previsão.',
       'Delete "$name"? Paid transactions stay; planned ones leave the forecast.');
   String get otherBill => _t('Outra', 'Other');
+  String get weekendRule => _t('Se calhar ao fim de semana ou feriado', 'If it falls on a weekend or holiday');
+  String shift(DayShift d) => switch (d) {
+        DayShift.none => _t('Manter o dia', 'Keep the day'),
+        DayShift.before => _t('Dia útil anterior', 'Previous business day'),
+        DayShift.after => _t('Dia útil seguinte', 'Next business day'),
+      };
+  String nextOn(String date) => _t('Próxima vez: $date', 'Next: $date');
+  String get holidays => _t('Feriados', 'Holidays');
+  String get holidaysHint => _t('Contam como dias não úteis nas contas que mudam de dia.',
+      'Count as non-business days for bills that move off them.');
+  String holidayName(String code) => switch (code) {
+        'PT' => 'Portugal',
+        _ => _t('Nenhum (só fins de semana)', 'None (weekends only)'),
+      };
 
   /// Suggested bills: (Portuguese category key, name in this language, variable?).
   List<(String, String, bool)> get billSuggestions => [
