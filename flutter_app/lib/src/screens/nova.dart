@@ -10,6 +10,9 @@ import '../logic.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'preferences.dart';
+
+enum _Kind { expense, income, transfer }
 
 /// Full-screen page on phones (portrait or landscape), a centred dialog on tablets and desktop.
 /// With [editing], the same form edits an existing movement.
@@ -44,6 +47,34 @@ class _NovaScreenState extends State<NovaScreen> {
   late String _cat = widget.editing?.category ?? 'Alimentação';
   late String _estado = widget.editing?.estado ?? 'Pago';
   late String? _date = widget.editing?.date;
+  _Kind? _kind;
+  String? _account, _toAccount;
+
+  /// Picks the kind and sensible accounts: expenses from the everyday account,
+  /// income into the current account, transfers from current to everyday.
+  void _setKind(_Kind k, AppState state) {
+    String first(bool Function(Account) test, {String? not}) =>
+        state.accounts.where((a) => test(a) && a.id != not).firstOrNull?.id ??
+        state.accounts.firstWhere((a) => a.id != not, orElse: () => state.accounts.first).id;
+    final cats = state.categories;
+    _kind = k;
+    switch (k) {
+      case _Kind.expense:
+        _cat = cats.any((c) => c.name == _cat && c.type == 'Saída')
+            ? _cat
+            : cats.firstWhere((c) => c.type == 'Saída').name;
+        _account = first((a) => a.kind == AccountKind.spending);
+        _toAccount = null;
+      case _Kind.income:
+        _cat = cats.firstWhere((c) => c.type == 'Entrada').name;
+        _account = first((a) => a.kind == AccountKind.current);
+        _toAccount = null;
+      case _Kind.transfer:
+        _cat = transferCategory.name;
+        _account = first((a) => a.kind == AccountKind.current);
+        _toAccount = first((a) => a.kind == AccountKind.spending, not: _account);
+    }
+  }
   String? _error;
   late final _desc = TextEditingController(text: widget.editing?.description ?? '');
 
@@ -69,15 +100,36 @@ class _NovaScreenState extends State<NovaScreen> {
       setState(() => _error = s.enterAmount);
       return;
     }
+    final state = app.store.state;
+    final transfer = _kind == _Kind.transfer;
+    if (transfer && (_toAccount == null || _toAccount == _account)) {
+      setState(() => _error = s.sameAccount);
+      return;
+    }
     final typed = _desc.text.trim();
-    final desc = typed.isEmpty ? _cat : typed;
+    final desc = typed.isNotEmpty
+        ? typed
+        : transfer
+            ? s.transferLabel(s.accountName(state.accountById(_account)!), s.accountName(state.accountById(_toAccount)!))
+            : _cat;
     final messenger = ScaffoldMessenger.of(context);
-    var message = s.expenseAdded;
+    var message = switch (_kind!) {
+      _Kind.expense => s.expenseAdded,
+      _Kind.income => s.incomeAdded,
+      _Kind.transfer => s.transferAdded,
+    };
 
     final old = widget.editing;
     if (old != null) {
-      app.store.updateMovement(
-          old.copyWith(date: _date, description: desc, category: _cat, cents: _cents, estado: _estado));
+      app.store.updateMovement(old.copyWith(
+          date: _date,
+          description: desc,
+          category: _cat,
+          cents: _cents,
+          estado: _estado,
+          account: _account,
+          toAccount: _toAccount,
+          clearToAccount: !transfer));
       app.pickCycle(cycleOfMovement(app.store.state.movements.firstWhere((m) => m.id == old.id),
           app.store.state.config.cycleStartDay));
       message = s.movementUpdated;
@@ -90,7 +142,14 @@ class _NovaScreenState extends State<NovaScreen> {
         if (choice == null || !mounted) return; // dismissed: stay on the form
       }
       if (choice.isEmpty) {
-        app.addMovement(date: _date!, description: desc, category: _cat, cents: _cents, estado: _estado);
+        app.addMovement(
+            date: _date!,
+            description: desc,
+            category: _cat,
+            cents: _cents,
+            estado: _estado,
+            account: _account,
+            toAccount: _toAccount);
       } else {
         app.store.payPlanned(choice, cents: _cents, date: _date!);
         app.pickCycle(cycleIdOf(_date!, app.store.state.config.cycleStartDay));
@@ -174,11 +233,36 @@ class _NovaScreenState extends State<NovaScreen> {
     final lang = app.lang;
     final m = app.model;
     _date ??= m.today;
-    // a new entry is an expense; when editing, keep the movement's side (income / expense)
-    final editingIncome = widget.editing != null && m.isIncome(widget.editing!.category);
-    final cats = m.state.categories.where((c) => (c.type == 'Entrada') == editingIncome);
+    final state = m.state;
+    final multi = state.accounts.length > 1;
+    if (_kind == null) {
+      final e = widget.editing;
+      if (e == null) {
+        _setKind(_Kind.expense, state);
+      } else {
+        // editing: keep what the movement is, on its accounts
+        _kind = isTransfer(e, typesOf(state)) ? _Kind.transfer : (m.isIncome(e.category) ? _Kind.income : _Kind.expense);
+        _account = e.account ?? state.defaultAccount;
+        _toAccount = e.toAccount;
+      }
+    }
+    final kind = _kind!;
+    final cats = state.categories.where((c) => c.type == (kind == _Kind.income ? 'Entrada' : 'Saída'));
+    final kinds = [_Kind.expense, _Kind.income, if (multi || kind == _Kind.transfer) _Kind.transfer];
+    String kindLabel(_Kind k) => switch (k) {
+          _Kind.expense => s.kindExpense,
+          _Kind.income => s.kindIncome,
+          _Kind.transfer => s.kindTransfer,
+        };
 
     final fields = <Widget>[
+      const SizedBox(height: 4),
+      _Segmented<_Kind>(
+        value: kind,
+        items: kinds,
+        label: kindLabel,
+        onChanged: (k) => setState(() => _setKind(k, state)),
+      ),
       const SizedBox(height: 14),
       BigAmount(_cents, size: 60, alignment: Alignment.center, color: _error != null ? Palette.neg : Palette.text),
       if (_error != null)
@@ -198,15 +282,41 @@ class _NovaScreenState extends State<NovaScreen> {
             textInputAction: TextInputAction.done,
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
             decoration: InputDecoration.collapsed(
-                hintText: s.expenseHint, hintStyle: const TextStyle(color: Color(0xFF55555B))),
+                hintText: switch (kind) {
+                  _Kind.expense => s.expenseHint,
+                  _Kind.income => s.incomeHint,
+                  _Kind.transfer => s.optional,
+                },
+                hintStyle: const TextStyle(color: Color(0xFF55555B))),
           ),
         ]),
       ),
       const SizedBox(height: 16),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        for (final c in cats)
-          PillChip(label: s.category(c.name), selected: _cat == c.name, onTap: () => setState(() => _cat = c.name)),
-      ]),
+      if (kind == _Kind.transfer) ...[
+        Lbl(s.from),
+        const SizedBox(height: 8),
+        AccountChips(
+            value: _account!,
+            onChanged: (v) => setState(() {
+                  _account = v;
+                  if (_toAccount == v) _toAccount = null;
+                })),
+        const SizedBox(height: 14),
+        Lbl(s.to),
+        const SizedBox(height: 8),
+        AccountChips(value: _toAccount ?? '', exclude: _account, onChanged: (v) => setState(() => _toAccount = v)),
+      ] else ...[
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final c in cats)
+            PillChip(label: s.category(c.name), selected: _cat == c.name, onTap: () => setState(() => _cat = c.name)),
+        ]),
+        if (multi) ...[
+          const SizedBox(height: 14),
+          Lbl(s.account),
+          const SizedBox(height: 8),
+          AccountChips(value: _account!, onChanged: (v) => setState(() => _account = v)),
+        ],
+      ],
       const SizedBox(height: 16),
       Row(children: [
         Expanded(
@@ -234,7 +344,12 @@ class _NovaScreenState extends State<NovaScreen> {
           ),
         ),
         const SizedBox(width: 10),
-        Expanded(child: _Segmented(value: _estado, label: s.estado, onChanged: (v) => setState(() => _estado = v))),
+        Expanded(
+            child: _Segmented<String>(
+                value: _estado,
+                items: const ['Pago', 'Previsto'],
+                label: s.estado,
+                onChanged: (v) => setState(() => _estado = v))),
       ]),
     ];
 
@@ -255,7 +370,14 @@ class _NovaScreenState extends State<NovaScreen> {
                   onPressed: () => Navigator.of(context).pop(),
                 ),
                 Expanded(
-                  child: Text(widget.editing == null ? s.newExpense : s.editMovement,
+                  child: Text(
+                      widget.editing != null
+                          ? s.editMovement
+                          : switch (kind) {
+                              _Kind.expense => s.newExpense,
+                              _Kind.income => s.newIncome,
+                              _Kind.transfer => s.newTransfer,
+                            },
                       textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(width: 48),
@@ -270,7 +392,13 @@ class _NovaScreenState extends State<NovaScreen> {
                         onKey: _key,
                         onSave: _save,
                         s: s,
-                        label: widget.editing == null ? s.addExpense : s.saveChanges);
+                        label: widget.editing != null
+                            ? s.saveChanges
+                            : switch (kind) {
+                                _Kind.expense => s.addExpense,
+                                _Kind.income => s.addIncome,
+                                _Kind.transfer => s.addTransfer,
+                              });
                     // landscape phones / short windows: fields and keypad side by side
                     if (c.maxWidth >= 600 && c.maxHeight < 520) {
                       return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -296,11 +424,12 @@ class _NovaScreenState extends State<NovaScreen> {
   }
 }
 
-class _Segmented extends StatelessWidget {
-  const _Segmented({required this.value, required this.label, required this.onChanged});
-  final String value;
-  final String Function(String) label;
-  final ValueChanged<String> onChanged;
+class _Segmented<T> extends StatelessWidget {
+  const _Segmented({required this.value, required this.items, required this.label, required this.onChanged});
+  final T value;
+  final List<T> items;
+  final String Function(T) label;
+  final ValueChanged<T> onChanged;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -311,7 +440,7 @@ class _Segmented extends StatelessWidget {
           border: Border.all(color: Palette.surface2),
         ),
         child: Row(children: [
-          for (final e in const ['Pago', 'Previsto'])
+          for (final e in items)
             Expanded(
               child: Material(
                 color: value == e ? Palette.surface2 : Colors.transparent,

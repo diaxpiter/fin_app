@@ -66,10 +66,17 @@ class HomeScreen extends StatelessWidget {
       _StatGrid(columns: size == SizeClass.medium ? 4 : 2, cells: [
         (s.income, c.receitas, Palette.text, null),
         (s.expenses, c.despesas, Palette.neg, null),
-        // tap to set how much is in the account today
-        (s.inAccount, cashNow(m.state), Palette.text, () => editBalance(context)),
+        // one account: tap to set how much is in it today (with several, use the list below)
+        (s.inAccount, cashNow(m.state), Palette.text, m.multiAccount ? null : () => editBalance(context)),
         (s.lowest, c.lowest, Palette.text, null),
+        if (m.state.accounts.any((a) => a.isSavings)) (s.savedInvested, c.saved, Palette.accent, null),
       ]),
+      if (m.multiAccount) ...[
+        const SizedBox(height: 24),
+        Text(s.accounts, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        const AccountsList(showAdd: false),
+      ],
     ];
 
     final next = <Widget>[

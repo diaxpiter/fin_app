@@ -144,6 +144,8 @@ List<Movement> expandRecurring(List<Recurring> recurring, List<String> cycleIds,
         cents: overrides[key] ?? r.cents,
         estado: 'Previsto',
         gen: true,
+        account: r.account,
+        toAccount: r.toAccount,
       ));
     }
   }
@@ -228,7 +230,21 @@ String cycleOfMovement(Movement m, int startDay) => m.cycle ?? cycleIdOf(m.date,
 
 Map<String, String> typesOf(AppState s) => {for (final c in s.categories) c.name: c.type};
 bool _isIncome(Movement m, Map<String, String> types) => types[m.category] == 'Entrada';
-int signed(Movement m, Map<String, String> types) => _isIncome(m, types) ? m.cents : -m.cents;
+bool isTransfer(Movement m, Map<String, String> types) => types[m.category] == transferType && m.toAccount != null;
+
+/// Effect on the total: transfers between own accounts don't change it.
+int signed(Movement m, Map<String, String> types) =>
+    isTransfer(m, types) ? 0 : (_isIncome(m, types) ? m.cents : -m.cents);
+
+/// Effect on each account the movement touches.
+Map<String, int> accountDeltas(Movement m, Map<String, String> types, String defaultAccount) {
+  final from = m.account ?? defaultAccount;
+  if (isTransfer(m, types)) {
+    if (m.toAccount == from) return const {};
+    return {from: -m.cents, m.toAccount!: m.cents};
+  }
+  return {from: _isIncome(m, types) ? m.cents : -m.cents};
+}
 
 List<Movement> sortMovements(Iterable<Movement> list, Map<String, String> types) {
   // by date; within a day income first so running balances never dip artificially
@@ -249,11 +265,19 @@ class Cycle {
     required this.items, required this.receitas, required this.despesas, required this.sobra,
     required this.pago, required this.porPagar, required this.startBalance, required this.endBalance,
     required this.lowest, required this.lowestDate, required this.savingsRate,
+    this.saved = 0, this.accountEnd = const {}, this.accountLowest = const {}, this.accountLowestDate = const {},
   });
   final String id, label, start, end;
   final List<Movement> items;
   final int receitas, despesas, sobra, pago, porPagar, startBalance, endBalance, lowest, savingsRate;
   final String? lowestDate;
+
+  /// Net amount moved into savings / investment accounts this cycle.
+  final int saved;
+
+  /// Per account: balance at the end of the cycle, and the lowest end-of-day balance in it (with its date).
+  final Map<String, int> accountEnd, accountLowest;
+  final Map<String, String> accountLowestDate;
 }
 
 List<Cycle> computeCycles(AppState state, [String? today]) {
@@ -269,12 +293,19 @@ List<Cycle> computeCycles(AppState state, [String? today]) {
     byCycle[cycleOfMovement(m, s)]!.add(m);
   }
 
-  var balance = state.config.openingBalance;
+  var balance = state.config.openingBalance + state.accounts.fold<int>(0, (a, x) => a + x.openingBalance);
+  final accBal = {for (final a in state.accounts) a.id: a.openingBalance};
+  final savingsAcc = {for (final a in state.accounts) if (a.isSavings) a.id};
+  final defaultAcc = state.defaultAccount;
   return all.map((id) {
     final items = sortMovements(byCycle[id]!, types);
     var receitas = 0, despesas = 0, pago = 0, porPagar = 0;
+    var saved = 0;
     for (final m in items) {
-      if (_isIncome(m, types)) {
+      if (isTransfer(m, types)) {
+        if (savingsAcc.contains(m.toAccount)) saved += m.cents;
+        if (savingsAcc.contains(m.account ?? defaultAcc)) saved -= m.cents;
+      } else if (_isIncome(m, types)) {
         receitas += m.cents;
       } else {
         despesas += m.cents;
@@ -286,15 +317,31 @@ List<Cycle> computeCycles(AppState state, [String? today]) {
       }
     }
     final startBalance = balance;
-    // lowest END-OF-DAY balance inside the cycle
+    // lowest END-OF-DAY balance inside the cycle, in total and per account
     var run = startBalance, lowest = startBalance;
     String? lowestDate;
+    final accLowest = {...accBal};
+    final accLowestDate = <String, String>{};
+    final touched = <String>{};
     for (var i = 0; i < items.length; i++) {
       run += signed(items[i], types);
+      accountDeltas(items[i], types, defaultAcc).forEach((acc, d) {
+        accBal[acc] = (accBal[acc] ?? 0) + d;
+        touched.add(acc);
+      });
       final last = i == items.length - 1 || items[i + 1].date != items[i].date;
       if (last && (lowestDate == null || run < lowest)) {
         lowest = run;
         lowestDate = items[i].date;
+      }
+      if (last) {
+        for (final acc in touched) {
+          if (!accLowestDate.containsKey(acc) || accBal[acc]! < accLowest[acc]!) {
+            accLowest[acc] = accBal[acc]!;
+            accLowestDate[acc] = items[i].date;
+          }
+        }
+        touched.clear();
       }
     }
     final sobra = receitas - despesas;
@@ -306,18 +353,27 @@ List<Cycle> computeCycles(AppState state, [String? today]) {
       startBalance: startBalance, endBalance: balance,
       lowest: lowestDate == null ? startBalance : lowest, lowestDate: lowestDate,
       savingsRate: receitas > 0 ? (sobra / receitas * 100).round() : 0,
+      saved: saved, accountEnd: {...accBal}, accountLowest: accLowest, accountLowestDate: accLowestDate,
     );
   }).toList();
 }
 
-/// The opening balance that makes [cashNow] equal [balanceToday].
-int openingBalanceFor(AppState state, int balanceToday) =>
-    balanceToday - (cashNow(state) - state.config.openingBalance);
-
-// money actually in the account: opening balance + every movement marked Pago
-int cashNow(AppState state) {
+/// Money actually in [account] now: its opening balance + every movement on it marked Pago.
+int accountCash(AppState state, String account) {
   final types = typesOf(state);
-  return state.movements
-      .where((m) => m.estado == 'Pago')
-      .fold(state.config.openingBalance, (acc, m) => acc + signed(m, types));
+  var total = state.accountById(account)?.openingBalance ?? 0;
+  for (final m in state.movements) {
+    if (m.estado == 'Pago') total += accountDeltas(m, types, state.defaultAccount)[account] ?? 0;
+  }
+  return total;
+}
+
+/// The opening balance that makes [account] hold [balanceToday].
+int openingBalanceFor(AppState state, String account, int balanceToday) =>
+    balanceToday - (accountCash(state, account) - (state.accountById(account)?.openingBalance ?? 0));
+
+/// Money actually in [accounts] (default: everyday money: current + spending accounts).
+int cashNow(AppState state, {Iterable<String>? accounts}) {
+  final ids = accounts ?? state.accounts.where((a) => !a.isSavings).map((a) => a.id);
+  return state.config.openingBalance + ids.fold<int>(0, (sum, id) => sum + accountCash(state, id));
 }

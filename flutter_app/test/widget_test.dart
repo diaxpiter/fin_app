@@ -27,6 +27,7 @@ void main() {
   group('language and currency', languageTests);
   group('editing, balance, matching', editingTests);
   group('typed inputs and calendars', inputTests);
+  group('accounts', accountTests);
 
   const sizes = {
     'small phone': Size(320, 640),
@@ -223,6 +224,43 @@ void inputTests() {
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
     expect(find.text('O último pagamento não pode ser antes do primeiro.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+void accountTests() {
+  testWidgets('add an account, then move money to it with a transfer', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    // Ajustes → Contas → Nova conta
+    await tester.tap(find.byIcon(Icons.tune));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nova conta'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Conta'), 'Revolut');
+    await tester.enterText(find.widgetWithText(TextField, 'Saldo / valor hoje'), '100');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Revolut'), findsOneWidget);
+    await tester.tap(find.byType(BackButton)); // pageBack() looks for the English "Back" tooltip
+    await tester.pumpAndSettle();
+
+    // Nova → Transferência: Conta principal → Revolut, 50,00
+    await tester.tap(find.byTooltip('Nova despesa'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Transferência'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nova transferência'), findsOneWidget);
+    for (final k in ['5', '0', '0', '0']) {
+      await tester.tap(find.text(k).last);
+    }
+    await tester.tap(find.text('Adicionar transferência'));
+    await tester.pumpAndSettle();
+    expect(find.text('Transferência adicionada'), findsOneWidget);
+
+    // Início lists both accounts; Revolut went from 100 to 150
+    await tester.scrollUntilVisible(find.text('150,00'), 200);
+    expect(find.text('Revolut'), findsWidgets);
+    expect(find.text('150,00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

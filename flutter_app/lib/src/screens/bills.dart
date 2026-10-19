@@ -7,6 +7,7 @@ import '../app_controller.dart';
 import '../holidays.dart';
 import '../i18n.dart';
 import '../layout.dart';
+import 'preferences.dart';
 import '../logic.dart';
 import '../models.dart';
 import '../store.dart';
@@ -61,13 +62,17 @@ class BillRow extends StatelessWidget {
           ),
           title: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
             Text(bill.description, style: const TextStyle(fontSize: 15)),
+            if (bill.toAccount != null)
+              _pill(app.s.transferLabel(
+                  app.s.accountName(m.state.accountById(bill.account) ?? m.state.accounts.first),
+                  app.s.accountName(m.state.accountById(bill.toAccount) ?? m.state.accounts.first))),
             if (bill.variable) _pill(app.s.variable),
             if (bill.shift != DayShift.none) _pill(app.s.shift(bill.shift)),
             if (bill.to != null) _pill(app.s.until(cycleLabel(bill.to!, app.lang).substring(0, 3))),
           ]),
           trailing: [
             Text('${income ? '+' : ''}${app.money.amount(bill.cents)}',
-                style: mono(color: income ? Palette.accent : Palette.text)),
+                style: mono(color: income ? Palette.accent : (bill.toAccount != null ? Palette.muted : Palette.text))),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, size: 18, color: Palette.muted),
           ],
@@ -120,6 +125,9 @@ class _BillFormState extends State<_BillForm> {
   late String? _from = (widget.bill?.id.isEmpty ?? true) ? null : widget.bill!.from;
   late String? _to = widget.bill?.to;
   late DayShift _shift = widget.bill?.shift ?? DayShift.none;
+  late String? _account = widget.bill?.account;
+  late String? _toAccount = widget.bill?.toAccount;
+  late bool _transfer = widget.bill?.toAccount != null;
   String? _error;
 
   @override
@@ -133,7 +141,10 @@ class _BillFormState extends State<_BillForm> {
     final s = app.s;
     final desc = _desc.text.trim();
     final cents = parseAmount(_amount.text);
+    final state = app.store.state;
+    final account = _account ?? state.defaultAccount;
     if (desc.isEmpty) return setState(() => _error = s.enterDescription);
+    if (_transfer && (_toAccount == null || _toAccount == account)) return setState(() => _error = s.sameAccount);
     if (cents == null || cents <= 0) return setState(() => _error = s.enterAmountExample);
     final m = app.model;
     // a new bill starts in the current cycle unless a first payment was picked; it never fills past months
@@ -144,13 +155,15 @@ class _BillFormState extends State<_BillForm> {
       Recurring(
         id: _isNew ? Store.newRecurringId() : old!.id,
         description: desc,
-        category: _cat,
+        category: _transfer ? transferCategory.name : _cat,
         cents: cents,
         day: _day,
         variable: _variable,
         from: from,
         to: _to,
         shift: _shift,
+        account: state.accounts.length > 1 ? account : _account,
+        toAccount: _transfer ? _toAccount : null,
       ),
       m.today,
     );
@@ -245,13 +258,46 @@ class _BillFormState extends State<_BillForm> {
             style: mono(size: 16),
             decoration: deco(_variable ? s.estimatedAmount : s.amount, suffix: app.money.symbol, hint: app.money.amount(0)),
           ),
-          const SizedBox(height: 14),
-          Lbl(s.categoryLabel),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final c in m.state.categories)
-              PillChip(label: s.category(c.name), selected: _cat == c.name, onTap: () => setState(() => _cat = c.name)),
-          ]),
+          if (m.multiAccount)
+            SwitchListTile(
+              value: _transfer,
+              onChanged: (v) => setState(() => _transfer = v),
+              contentPadding: EdgeInsets.zero,
+              title: Text(s.isTransferBill, style: const TextStyle(fontSize: 15)),
+              subtitle: Text(s.transferBillHint, style: const TextStyle(fontSize: 12, color: Palette.muted)),
+            ),
+          if (_transfer) ...[
+            const SizedBox(height: 6),
+            Lbl(s.from),
+            const SizedBox(height: 8),
+            AccountChips(
+                value: _account ?? m.state.defaultAccount,
+                onChanged: (v) => setState(() {
+                      _account = v;
+                      if (_toAccount == v) _toAccount = null;
+                    })),
+            const SizedBox(height: 12),
+            Lbl(s.to),
+            const SizedBox(height: 8),
+            AccountChips(
+                value: _toAccount ?? '',
+                exclude: _account ?? m.state.defaultAccount,
+                onChanged: (v) => setState(() => _toAccount = v)),
+          ] else ...[
+            const SizedBox(height: 14),
+            Lbl(s.categoryLabel),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final c in m.state.categories.where((c) => c.type != transferType))
+                PillChip(label: s.category(c.name), selected: _cat == c.name, onTap: () => setState(() => _cat = c.name)),
+            ]),
+            if (m.multiAccount) ...[
+              const SizedBox(height: 14),
+              Lbl(s.account),
+              const SizedBox(height: 8),
+              AccountChips(value: _account ?? m.state.defaultAccount, onChanged: (v) => setState(() => _account = v)),
+            ],
+          ],
           const SizedBox(height: 16),
           Row(children: [
             Expanded(

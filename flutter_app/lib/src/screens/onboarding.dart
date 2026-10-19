@@ -21,7 +21,9 @@ class OnboardingScreen extends StatelessWidget {
     final account = AccountScope.of(context, listen: false);
     final bills = [...app.store.state.recurring]..sort((a, b) => a.day.compareTo(b.day));
     final income = bills.where((r) => app.model.isIncome(r.category)).fold(0, (a, r) => a + r.cents);
-    final out = bills.where((r) => !app.model.isIncome(r.category)).fold(0, (a, r) => a + r.cents);
+    final out = bills
+        .where((r) => !app.model.isIncome(r.category) && !app.model.isTransferCategory(r.category))
+        .fold(0, (a, r) => a + r.cents);
 
     return AuthFrame(maxWidth: 560, children: [
       Lbl(s.welcome),
@@ -33,7 +35,11 @@ class OnboardingScreen extends StatelessWidget {
       PrefRow(label: s.language, child: const LanguagePicker()),
       PrefRow(label: s.currency, child: const CurrencyPicker()),
       PrefRow(label: s.monthStartsOn, hint: s.startDayHint, child: const StartDayPicker()),
-      PrefRow(label: s.balanceQ, hint: s.balanceHint, child: const BalanceButton()),
+      const SizedBox(height: 20),
+      Lbl(s.accounts),
+      const SizedBox(height: 4),
+      Text(s.balanceHint, style: const TextStyle(fontSize: 12, height: 1.4, color: Palette.muted)),
+      const AccountsList(),
       const SizedBox(height: 20),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Lbl(s.billsTitle),

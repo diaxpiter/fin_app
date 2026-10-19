@@ -41,7 +41,7 @@ void main() {
     expect(cashNow(s), -4800);
     final store = Store.memory(s)..setBalanceToday(120000);
     expect(cashNow(store.state), 120000);
-    expect(store.state.config.openingBalance, 124800);
+    expect(store.state.accounts.first.openingBalance, 124800);
     store.setBalanceToday(-5000);
     expect(cashNow(store.state), -5000);
   });

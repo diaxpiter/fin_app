@@ -52,11 +52,20 @@ class Store extends ChangeNotifier {
     required String category,
     required int cents,
     required String estado,
+    String? account,
+    String? toAccount,
   }) {
     final id = 'm:${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}'
         '${_rand.nextInt(1 << 20).toRadixString(36)}';
     _state.movements.add(Movement(
-        id: id, date: date, description: description, category: category, cents: cents, estado: estado));
+        id: id,
+        date: date,
+        description: description,
+        category: category,
+        cents: cents,
+        estado: estado,
+        account: account,
+        toAccount: toAccount));
     _commit();
     return id;
   }
@@ -85,10 +94,48 @@ class Store extends ChangeNotifier {
     if (m != null) updateMovement(m.copyWith(cents: cents, date: date, estado: 'Pago'));
   }
 
-  /// Sets "how much is in the account today"; the opening balance is derived from it.
-  void setBalanceToday(int cents) {
-    _state.config = _state.config.copyWith(openingBalance: openingBalanceFor(_state, cents));
+  /// Sets "how much is in the account today" (default: the first account); the opening balance is derived from it.
+  void setBalanceToday(int cents, {String? account}) {
+    final id = account ?? _state.defaultAccount;
+    final i = _state.accounts.indexWhere((a) => a.id == id);
+    if (i < 0) return;
+    _state.accounts[i] = _state.accounts[i].copyWith(openingBalance: openingBalanceFor(_state, id, cents));
     _commit();
+  }
+
+  // ---- accounts ----
+
+  static String newAccountId() =>
+      'a${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${_rand.nextInt(1 << 16).toRadixString(36)}';
+
+  /// Adds or updates an account; [balanceToday], when given, sets its balance.
+  void saveAccount(Account a, {int? balanceToday}) {
+    final i = _state.accounts.indexWhere((x) => x.id == a.id);
+    if (i >= 0) {
+      _state.accounts[i] = a;
+    } else {
+      _state.accounts.add(a);
+    }
+    if (balanceToday != null) {
+      final j = _state.accounts.indexWhere((x) => x.id == a.id);
+      _state.accounts[j] = a.copyWith(openingBalance: openingBalanceFor(_state, a.id, balanceToday));
+    }
+    _commit();
+  }
+
+  /// Whether anything (movements or bills) uses the account.
+  bool accountInUse(String id) {
+    final isDefault = id == _state.defaultAccount;
+    bool on(String? acc, String? to) => (acc ?? (isDefault ? id : null)) == id || to == id;
+    return _state.movements.any((m) => on(m.account, m.toAccount)) || _state.recurring.any((r) => on(r.account, r.toAccount));
+  }
+
+  /// Deletes an unused account (never the last one). Returns false if it can't.
+  bool removeAccount(String id) {
+    if (_state.accounts.length <= 1 || accountInUse(id)) return false;
+    _state.accounts.removeWhere((a) => a.id == id);
+    _commit();
+    return true;
   }
 
   void removeMovement(String id) {
@@ -167,7 +214,12 @@ class Store extends ChangeNotifier {
       _setRecurring(_state.recurring.where((r) => r.id != id).toList(), id, today);
 
   void _setRecurring(List<Recurring> list, String changedId, String? today) {
-    _state = AppState(config: _state.config, categories: _state.categories, recurring: list, movements: _state.movements);
+    _state = AppState(
+        config: _state.config,
+        categories: _state.categories,
+        recurring: list,
+        movements: _state.movements,
+        accounts: _state.accounts);
     _state.movements = syncRecurring(_state, today ?? todayISO(), regenerate: {changedId}) ?? _state.movements;
     _commit();
   }

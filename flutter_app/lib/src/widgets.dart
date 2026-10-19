@@ -229,7 +229,12 @@ class MovementRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final income = m.isIncome(mv.category);
+    final transfer = mv.toAccount != null && m.isTransferCategory(mv.category);
     final paid = mv.estado == 'Pago';
+    String acc(String? id) => app.s.accountName(m.state.accountById(id) ?? m.state.accounts.first);
+    final sub = transfer
+        ? app.s.transferLabel(acc(mv.account), acc(mv.toAccount))
+        : '${app.s.category(mv.category)}${m.multiAccount ? ' · ${acc(mv.account)}' : ''}';
     return InkWell(
       onTap: () => showMovementActions(context, mv),
       child: Container(
@@ -243,13 +248,13 @@ class MovementRow extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(mv.description, style: const TextStyle(fontSize: 15), overflow: TextOverflow.ellipsis),
               const SizedBox(height: 3),
-              Text(app.s.category(mv.category), style: const TextStyle(fontSize: 12, color: Palette.muted)),
+              Text(sub, style: const TextStyle(fontSize: 12, color: Palette.muted), overflow: TextOverflow.ellipsis),
             ]),
           ),
           const SizedBox(width: 12),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('${income ? '+' : '−'}${app.money.amount(mv.cents)}',
-                style: mono(color: income ? Palette.accent : Palette.text)),
+            Text('${transfer ? '⇄ ' : (income ? '+' : '−')}${app.money.amount(mv.cents)}',
+                style: mono(color: income ? Palette.accent : (transfer ? Palette.muted : Palette.text))),
             const SizedBox(height: 3),
             Text(app.s.estado(mv.estado).toUpperCase(),
                 style: mono(size: 11, weight: FontWeight.w500, color: paid ? Palette.muted : Palette.warn)

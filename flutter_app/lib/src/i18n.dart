@@ -5,7 +5,7 @@
 import 'package:intl/intl.dart';
 
 import 'backend.dart';
-import 'models.dart' show DayShift;
+import 'models.dart' show Account, AccountKind, DayShift;
 
 const languages = {'pt': 'Português', 'en': 'English'};
 
@@ -81,6 +81,7 @@ const _defaultCategoriesEn = {
   'Crédito': 'Credit',
   'Lazer': 'Leisure',
   'Outros': 'Other',
+  'Transferência': 'Transfer',
 };
 
 class S {
@@ -142,10 +143,62 @@ class S {
   // ---- new expense ----
   String get enterAmount => _t('Indica um valor.', 'Enter an amount.');
   String get expenseHint => _t('Ex.: Supermercado', 'E.g. Groceries');
+  String get incomeHint => _t('Ex.: Salário', 'E.g. Salary');
+  String get optional => _t('Opcional', 'Optional');
   String get todayPrefix => _t('Hoje, ', 'Today, ');
   String get addExpense => _t('Adicionar despesa', 'Add expense');
   String get expenseAdded => _t('Despesa adicionada', 'Expense added');
   String get edit => _t('Editar', 'Edit');
+
+  // ---- accounts ----
+  String get accounts => _t('Contas', 'Accounts');
+  String accountName(Account a) => a.name == Account.mainName ? _t(a.name, 'Main account') : a.name;
+  String accountKind(AccountKind k) => switch (k) {
+        AccountKind.current => _t('À ordem', 'Current'),
+        AccountKind.spending => _t('Dia a dia', 'Everyday'),
+        AccountKind.savings => _t('Poupança', 'Savings'),
+        AccountKind.investment => _t('Investimento', 'Investments'),
+      };
+  String accountKindHint(AccountKind k) => switch (k) {
+        AccountKind.current => _t('Onde entra o salário e saem as contas fixas', 'Where salary comes in and fixed bills go out'),
+        AccountKind.spending => _t('Para os gastos do dia a dia', 'For everyday spending'),
+        AccountKind.savings => _t('Fundo de emergência, poupanças', 'Emergency fund, savings'),
+        AccountKind.investment => _t('ETFs, ações, fundos', 'ETFs, stocks, funds'),
+      };
+  String get newAccount => _t('Nova conta', 'New account');
+  String get editAccount => _t('Editar conta', 'Edit account');
+  String get accountHint => _t('Ex.: ActivoBank', 'E.g. Revolut');
+  String get accountType => _t('Tipo', 'Type');
+  String get enterName => _t('Indica um nome.', 'Enter a name.');
+  String get accountSaved => _t('Conta guardada', 'Account saved');
+  String get accountDeleted => _t('Conta apagada', 'Account deleted');
+  String get accountInUse => _t('Esta conta tem movimentos ou contas fixas. Muda-os para outra conta antes de a apagar.',
+      'This account has transactions or fixed bills. Move them to another account before deleting it.');
+  String deleteAccountQ2(String name) => _t('Apagar a conta "$name"?', 'Delete the account "$name"?');
+  String get total => _t('Total', 'Total');
+  String lowestOn(String amount, String date) => _t('mín. $amount a $date', 'low $amount on $date');
+  String get savedInvested => _t('Poupado / investido', 'Saved / invested');
+  String get valueToday => _t('Saldo / valor hoje', 'Balance / value today');
+  String get investmentHint => _t('Para investimentos, atualiza com o valor atual de vez em quando.',
+      'For investments, update it with the current value now and then.');
+
+  // ---- income / transfers ----
+  String get kindExpense => _t('Despesa', 'Expense');
+  String get kindIncome => _t('Receita', 'Income');
+  String get kindTransfer => _t('Transferência', 'Transfer');
+  String get newIncome => _t('Nova receita', 'New income');
+  String get newTransfer => _t('Nova transferência', 'New transfer');
+  String get addIncome => _t('Adicionar receita', 'Add income');
+  String get addTransfer => _t('Adicionar transferência', 'Add transfer');
+  String get incomeAdded => _t('Receita adicionada', 'Income added');
+  String get transferAdded => _t('Transferência adicionada', 'Transfer added');
+  String get from => _t('De', 'From');
+  String get to => _t('Para', 'To');
+  String get sameAccount => _t('Escolhe duas contas diferentes.', 'Pick two different accounts.');
+  String get isTransferBill => _t('É uma transferência entre as minhas contas', 'It is a transfer between my accounts');
+  String get transferBillHint => _t('Ex.: deixar dinheiro no Revolut, investir no XTB. Não conta como despesa.',
+      "E.g. moving money to everyday spending or investing. It doesn't count as an expense.");
+  String transferLabel(String from, String to) => '$from → $to';
   String get editMovement => _t('Editar movimento', 'Edit transaction');
   String get saveChanges => _t('Guardar alterações', 'Save changes');
   String get movementUpdated => _t('Movimento atualizado', 'Transaction updated');

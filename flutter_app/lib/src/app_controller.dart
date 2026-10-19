@@ -22,6 +22,8 @@ class Model {
   final Map<String, String> _types;
 
   bool isIncome(String category) => _types[category] == 'Entrada';
+  bool isTransferCategory(String category) => _types[category] == transferType;
+  bool get multiAccount => state.accounts.length > 1;
   Color colorOf(String category) => _colors[category] ?? Palette.fallbackDot;
 }
 
@@ -34,6 +36,14 @@ class AppController extends ChangeNotifier {
   final DateTime Function() _clock;
   String? _cycle;
   String filter = 'Todos';
+
+  /// Movimentos shows only this account (null = all).
+  String? accountFilter;
+
+  void setAccountFilter(String? id) {
+    accountFilter = id;
+    notifyListeners();
+  }
   int tab = 0;
 
   String get today => todayISO(_clock());
@@ -91,10 +101,19 @@ class AppController extends ChangeNotifier {
     required String category,
     required int cents,
     required String estado,
+    String? account,
+    String? toAccount,
   }) {
     _cycle = cycleIdOf(date, store.state.config.cycleStartDay);
     tab = 0;
-    store.addMovement(date: date, description: description, category: category, cents: cents, estado: estado);
+    store.addMovement(
+        date: date,
+        description: description,
+        category: category,
+        cents: cents,
+        estado: estado,
+        account: account,
+        toAccount: toAccount);
   }
 
   @override

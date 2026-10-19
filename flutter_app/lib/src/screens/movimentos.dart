@@ -16,7 +16,10 @@ class MovimentosScreen extends StatelessWidget {
     final s = app.s;
     final m = app.model;
     final c = m.cycle;
-    final items = c.items.where((x) => app.filter == 'Todos' || x.estado == app.filter);
+    final acc = app.accountFilter;
+    final items = c.items.where((x) =>
+        (app.filter == 'Todos' || x.estado == app.filter) &&
+        (acc == null || (x.account ?? m.state.defaultAccount) == acc || x.toAccount == acc));
     final groups = <(String, List<Movement>)>[];
     for (final it in items) {
       if (groups.isNotEmpty && groups.last.$1 == it.date) {
@@ -45,6 +48,23 @@ class MovimentosScreen extends StatelessWidget {
               ),
           ]),
         ),
+        if (m.multiAccount) ...[
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final a in [null, ...m.state.accounts])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: PillChip(
+                    label: a == null ? s.accounts : s.accountName(a),
+                    selected: acc == a?.id,
+                    onTap: () => app.setAccountFilter(a?.id),
+                  ),
+                ),
+            ]),
+          ),
+        ],
         if (groups.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 16),

@@ -31,6 +31,14 @@ Breakpoints live in `lib/src/layout.dart`.
   national holidays are built in, Easter-based ones included (`lib/src/holidays.dart`);
   Ajustes → Feriados can switch to weekends only. A salary paid early, before the cycle
   starts, still counts in its own cycle.
+- **Accounts**: e.g. a current account for salary and bills, an everyday card, an
+  investment broker and an emergency fund. Each movement and fixed bill belongs to one;
+  **transfers** (one-off, or as a fixed bill) move money between them without counting as
+  income or expense. Início lists each account with today's balance and its lowest point
+  this cycle (red if it would go negative before payday), plus how much went to savings /
+  investments. "Em conta" is everyday money; savings and investments are listed apart.
+  With one account none of this shows. (The old PWA doesn't know transfers: a backup with
+  them imports there as expenses.)
 - **Language**: Português or English (`lib/src/i18n.dart`, both side by side). Until the
   user picks one it follows the device. Default category names are stored in Portuguese
   and shown translated.
@@ -108,4 +116,5 @@ test/logic_test.dart          sheet numbers (same cases as the JS tests)
 test/widget_test.dart         renders every tab at 5 screen sizes, adds an expense
 test/account_test.dart        encryption, sign-up/in, recovery, sync, conflicts (fake server)
 test/i18n_test.dart           number/currency formatting, amount parsing, saved preferences
+test/accounts_test.dart       per-account balances, transfers, savings, per-account forecast
 ```
