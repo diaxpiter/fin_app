@@ -117,6 +117,7 @@ class _BillFormState extends State<_BillForm> {
   late String _cat = widget.bill?.category ?? 'Moradia';
   late int _day = widget.bill?.day ?? 1;
   late bool _variable = widget.bill?.variable ?? false;
+  late String? _from = (widget.bill?.id.isEmpty ?? true) ? null : widget.bill!.from;
   late String? _to = widget.bill?.to;
   late DayShift _shift = widget.bill?.shift ?? DayShift.none;
   String? _error;
@@ -135,6 +136,9 @@ class _BillFormState extends State<_BillForm> {
     if (desc.isEmpty) return setState(() => _error = s.enterDescription);
     if (cents == null || cents <= 0) return setState(() => _error = s.enterAmountExample);
     final m = app.model;
+    // a new bill starts in the current cycle unless a first payment was picked; it never fills past months
+    final from = _from ?? (_isNew ? cycleIdOf(m.today, m.state.config.cycleStartDay) : null);
+    if (from != null && _to != null && _to!.compareTo(from) < 0) return setState(() => _error = s.endBeforeStart);
     final old = widget.bill;
     app.store.saveRecurring(
       Recurring(
@@ -144,8 +148,7 @@ class _BillFormState extends State<_BillForm> {
         cents: cents,
         day: _day,
         variable: _variable,
-        // a new bill starts in the current cycle; it never fills past months
-        from: _isNew ? cycleIdOf(m.today, m.state.config.cycleStartDay) : old!.from,
+        from: from,
         to: _to,
         shift: _shift,
       ),
@@ -167,6 +170,38 @@ class _BillFormState extends State<_BillForm> {
     return '';
   }
 
+  /// The date the bill falls on in [cycle], e.g. "25 nov 2026".
+  String _dateIn(Model m, String cycle, String lang) {
+    final d = shiftToBusinessDay(
+        occurrenceDate(_day, cycle, m.state.config.cycleStartDay), _shift, m.state.config.holidays);
+    return '${formatDay(d, lang)} ${parseISO(d).y}';
+  }
+
+  Future<void> _pickFirst(Model m) async {
+    final start = m.state.config.cycleStartDay;
+    final initial = _from == null ? m.today : occurrenceDate(_day, _from!, start);
+    final d = await pickDate(context, initial);
+    if (d == null) return;
+    setState(() {
+      _day = parseISO(d).d; // the first payment's day becomes the day of the month
+      _from = cycleIdOf(d, start);
+      _error = null;
+    });
+  }
+
+  Future<void> _pickLast(Model m) async {
+    final start = m.state.config.cycleStartDay;
+    final initial = _to != null
+        ? occurrenceDate(_day, _to!, start)
+        : occurrenceDate(_day, nextCycleId(_from ?? cycleIdOf(m.today, start), 11), start);
+    final d = await pickDate(context, initial);
+    if (d == null) return;
+    setState(() {
+      _to = cycleIdOf(d, start);
+      _error = null;
+    });
+  }
+
   Future<void> _delete(AppController app) async {
     final s = app.s;
     if (!await confirm(context, s.deleteBillQ(widget.bill!.description), s.delete)) return;
@@ -182,11 +217,6 @@ class _BillFormState extends State<_BillForm> {
     final s = app.s;
     final m = app.model;
     final now = cycleIdOf(m.today, m.state.config.cycleStartDay);
-    final endOptions = {
-      ...cycleRange(now, nextCycleId(now, 23)),
-      if (_to != null) _to!,
-    }.toList()
-      ..sort();
 
     InputDecoration deco(String label, {String? suffix, String? hint}) => InputDecoration(
           labelText: label,
@@ -211,6 +241,7 @@ class _BillFormState extends State<_BillForm> {
           TextField(
             controller: _amount,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: const [MoneyInputFormatter()],
             style: mono(size: 16),
             decoration: deco(_variable ? s.estimatedAmount : s.amount, suffix: app.money.symbol, hint: app.money.amount(0)),
           ),
@@ -239,25 +270,23 @@ class _BillFormState extends State<_BillForm> {
                 ),
               ),
             ),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: DateField(
+                label: s.firstPayment,
+                text: _dateIn(m, _from ?? now, app.lang),
+                onTap: () => _pickFirst(m),
+              ),
+            ),
             const SizedBox(width: 10),
             Expanded(
-              child: InputDecorator(
-                decoration: deco(s.ends),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: _to,
-                    isDense: true,
-                    isExpanded: true,
-                    dropdownColor: Palette.surface,
-                    menuMaxHeight: 320,
-                    items: [
-                      DropdownMenuItem<String?>(value: null, child: Text(s.noEnd)),
-                      for (final id in endOptions)
-                        DropdownMenuItem<String?>(value: id, child: Text(cycleLabel(id, app.lang))),
-                    ],
-                    onChanged: (v) => setState(() => _to = v),
-                  ),
-                ),
+              child: DateField(
+                label: s.lastPayment,
+                text: _to == null ? s.noEnd : _dateIn(m, _to!, app.lang),
+                onTap: () => _pickLast(m),
+                onClear: _to == null ? null : () => setState(() => _to = null),
               ),
             ),
           ]),

@@ -8,6 +8,7 @@ import '../logic.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'ajustes.dart';
+import 'preferences.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -63,10 +64,11 @@ class HomeScreen extends StatelessWidget {
       ]),
       const SizedBox(height: 24),
       _StatGrid(columns: size == SizeClass.medium ? 4 : 2, cells: [
-        (s.income, c.receitas, Palette.text),
-        (s.expenses, c.despesas, Palette.neg),
-        (s.inAccount, cashNow(m.state), Palette.text),
-        (s.lowest, c.lowest, Palette.text),
+        (s.income, c.receitas, Palette.text, null),
+        (s.expenses, c.despesas, Palette.neg, null),
+        // tap to set how much is in the account today
+        (s.inAccount, cashNow(m.state), Palette.text, () => editBalance(context)),
+        (s.lowest, c.lowest, Palette.text, null),
       ]),
     ];
 
@@ -128,13 +130,13 @@ class HomeScreen extends StatelessWidget {
 
 class _StatGrid extends StatelessWidget {
   const _StatGrid({required this.cells, required this.columns});
-  final List<(String, int, Color)> cells;
+  final List<(String, int, Color, VoidCallback?)> cells;
   final int columns;
 
   @override
   Widget build(BuildContext context) {
     const side = BorderSide(color: Palette.line);
-    final rows = <List<(String, int, Color)>>[
+    final rows = <List<(String, int, Color, VoidCallback?)>>[
       for (var i = 0; i < cells.length; i += columns) cells.sublist(i, math.min(i + columns, cells.length)),
     ];
     return Container(
@@ -142,21 +144,24 @@ class _StatGrid extends StatelessWidget {
       child: Column(children: [
         for (final row in rows)
           Row(children: [
-            for (final (label, cents, color) in row)
+            for (final (label, cents, color, onTap) in row)
               Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(border: Border(right: side, bottom: side)),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Lbl(label),
-                    const SizedBox(height: 10),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(AppScope.of(context).money.amount(cents),
-                          style: mono(size: 20, weight: FontWeight.w500, color: color)),
-                    ),
-                  ]),
+                child: InkWell(
+                  onTap: onTap,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(border: Border(right: side, bottom: side)),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Lbl(label),
+                      const SizedBox(height: 10),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(AppScope.of(context).money.amount(cents),
+                            style: mono(size: 20, weight: FontWeight.w500, color: color)),
+                      ),
+                    ]),
+                  ),
                 ),
               ),
           ]),

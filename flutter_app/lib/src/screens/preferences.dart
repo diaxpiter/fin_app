@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../app_controller.dart';
 import '../holidays.dart';
 import '../i18n.dart';
+import '../logic.dart';
+import '../widgets.dart';
 import '../theme.dart';
 
 class _Box<T> extends StatelessWidget {
@@ -130,6 +132,68 @@ class StartDayPicker extends StatelessWidget {
           app.resetCycle();
         }
       },
+    );
+  }
+}
+
+/// Asks "how much is in your account today?" and derives the opening balance from it.
+Future<void> editBalance(BuildContext context) async {
+  final app = AppScope.of(context, listen: false);
+  final s = app.s;
+  final ctrl = TextEditingController(text: app.money.amount(cashNow(app.store.state)).replaceFirst('−', '-'));
+  final text = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: Palette.surface,
+      title: Text(s.balanceQ),
+      content: SizedBox(
+        width: 380,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            inputFormatters: const [MoneyInputFormatter(signed: true)],
+            style: mono(size: 18),
+            decoration: InputDecoration(suffixText: app.money.symbol, border: const OutlineInputBorder()),
+            onSubmitted: (v) => Navigator.pop(ctx, v),
+          ),
+          const SizedBox(height: 10),
+          Text(s.balanceHint, style: const TextStyle(fontSize: 12, height: 1.4, color: Palette.muted)),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+        TextButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: Text(s.save)),
+      ],
+    ),
+  );
+  if (text == null) return;
+  final negative = RegExp(r'^\s*[-−]').hasMatch(text);
+  final cents = parseAmount(text);
+  if (cents == null) return;
+  app.store.setBalanceToday(negative ? -cents : cents);
+  if (context.mounted) toast(context, s.balanceSet);
+}
+
+/// Shows the current balance; tapping it asks for today's balance.
+class BalanceButton extends StatelessWidget {
+  const BalanceButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return OutlinedButton(
+      onPressed: () => editBalance(context),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Palette.text,
+        side: const BorderSide(color: Palette.line2),
+        backgroundColor: Palette.surface,
+        minimumSize: const Size.fromHeight(48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        alignment: Alignment.centerLeft,
+      ),
+      child: Text(app.money.full(cashNow(app.store.state)), style: mono(size: 15)),
     );
   }
 }

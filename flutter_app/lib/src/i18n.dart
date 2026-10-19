@@ -145,6 +145,21 @@ class S {
   String get todayPrefix => _t('Hoje, ', 'Today, ');
   String get addExpense => _t('Adicionar despesa', 'Add expense');
   String get expenseAdded => _t('Despesa adicionada', 'Expense added');
+  String get edit => _t('Editar', 'Edit');
+  String get editMovement => _t('Editar movimento', 'Edit transaction');
+  String get saveChanges => _t('Guardar alterações', 'Save changes');
+  String get movementUpdated => _t('Movimento atualizado', 'Transaction updated');
+  String get matchTitle => _t('É uma conta prevista?', 'Is this a planned bill?');
+  String matchBody(String amount) => _t('Há contas previstas parecidas neste ciclo. Marcar uma como paga com $amount?',
+      'There are similar planned bills in this cycle. Mark one as paid with $amount?');
+  String get matchNo => _t('Não, é uma despesa nova', "No, it's a new expense");
+  String get markedPaid => _t('Conta marcada como paga', 'Bill marked as paid');
+  String get balanceToday => _t('Saldo em conta hoje', 'Account balance today');
+  String get balanceQ => _t('Quanto tens hoje na conta?', 'How much is in your account today?');
+  String get balanceHint => _t(
+      'Vê no teu banco. O "Em conta" e a previsão partem deste valor. Usa − se estiver negativo.',
+      'Check your bank. "In account" and the forecast start from this amount. Use − if it is negative.');
+  String get balanceSet => _t('Saldo atualizado', 'Balance updated');
 
   // ---- forecast ----
   String cycleCount(int n) => _t('$n ciclos', '$n cycles');
@@ -180,6 +195,10 @@ class S {
   String get dayOfMonth => _t('Dia do mês', 'Day of month');
   String get ends => _t('Termina', 'Ends');
   String get noEnd => _t('Sem fim', 'No end');
+  String get firstPayment => _t('Primeiro pagamento', 'First payment');
+  String get lastPayment => _t('Último pagamento', 'Last payment');
+  String get endBeforeStart =>
+      _t('O último pagamento não pode ser antes do primeiro.', "The last payment can't be before the first.");
   String get shortMonths =>
       _t('Nos meses mais curtos conta no último dia.', 'In shorter months it falls on the last day.');
   String get variableTitle => _t('O valor muda todos os meses', 'The amount changes every month');

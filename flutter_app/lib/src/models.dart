@@ -64,6 +64,7 @@ class Movement {
     required this.estado,
     this.gen = false,
     this.cycle,
+    this.edited = false,
   });
   final String id;
   final String date; // YYYY-MM-DD
@@ -76,6 +77,22 @@ class Movement {
   String estado; // 'Pago' | 'Previsto'
   final bool gen;
 
+  /// A planned bill the user changed by hand: editing the bill won't overwrite it.
+  final bool edited;
+
+  /// A copy with the user's changes. Moving the date drops any cycle override.
+  Movement copyWith({String? date, String? description, String? category, int? cents, String? estado}) => Movement(
+        id: id,
+        date: date ?? this.date,
+        description: description ?? this.description,
+        category: category ?? this.category,
+        cents: cents ?? this.cents,
+        estado: estado ?? this.estado,
+        gen: gen,
+        cycle: date == null || date == this.date ? cycle : null,
+        edited: gen,
+      );
+
   factory Movement.fromJson(Map<String, dynamic> j) => Movement(
         id: j['id'] as String,
         date: j['date'] as String,
@@ -85,12 +102,14 @@ class Movement {
         estado: j['estado'] as String,
         gen: j['gen'] == true,
         cycle: j['cycle'] as String?,
+        edited: j['edited'] == true,
       );
   Map<String, dynamic> toJson() => {
         'id': id, 'date': date, 'description': description, 'category': category,
         'cents': cents, 'estado': estado,
         if (gen) 'gen': true,
         if (cycle != null) 'cycle': cycle,
+        if (edited) 'edited': true,
       };
 }
 
@@ -114,10 +133,15 @@ class Config {
   final String holidays;
 
   Config copyWith(
-          {int? cycleStartDay, String? language, bool clearLanguage = false, String? currency, String? holidays}) =>
+          {int? cycleStartDay,
+          int? openingBalance,
+          String? language,
+          bool clearLanguage = false,
+          String? currency,
+          String? holidays}) =>
       Config(
         cycleStartDay: cycleStartDay ?? this.cycleStartDay,
-        openingBalance: openingBalance,
+        openingBalance: openingBalance ?? this.openingBalance,
         language: clearLanguage ? null : (language ?? this.language),
         currency: currency ?? this.currency,
         holidays: holidays ?? this.holidays,

@@ -1,12 +1,70 @@
 // Shared pieces used by several screens.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_controller.dart';
 import 'layout.dart';
 import 'logic.dart';
 import 'models.dart';
+import 'screens/nova.dart';
 import 'theme.dart';
+
+/// Money fields accept only digits and the separators "." and ","; [signed] also
+/// allows a leading minus. Anything else typed or pasted is ignored.
+class MoneyInputFormatter extends TextInputFormatter {
+  const MoneyInputFormatter({this.signed = false});
+  final bool signed;
+
+  static final _unsigned = RegExp(r'^[0-9.,]{0,15}$');
+  static final _signed = RegExp(r'^[-−]?[0-9.,]{0,15}$');
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) =>
+      (signed ? _signed : _unsigned).hasMatch(newValue.text) ? newValue : oldValue;
+}
+
+/// A form field that opens a calendar. Shows [text]; [onClear] adds a clear button.
+class DateField extends StatelessWidget {
+  const DateField({super.key, required this.label, required this.text, required this.onTap, this.onClear});
+  final String label, text;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            filled: true,
+            fillColor: Palette.bg,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            suffixIcon: onClear == null
+                ? const Icon(Icons.calendar_today_outlined, size: 18)
+                : IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: MaterialLocalizations.of(context).deleteButtonTooltip,
+                    onPressed: onClear,
+                  ),
+          ),
+          child: Text(text, overflow: TextOverflow.ellipsis),
+        ),
+      );
+}
+
+/// Opens the calendar on [initial] (YYYY-MM-DD) and returns the picked date as YYYY-MM-DD.
+Future<String?> pickDate(BuildContext context, String initial) async {
+  final d = DateTime.parse(initial);
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: d,
+    firstDate: DateTime(d.year - 5),
+    lastDate: DateTime(d.year + 10),
+  );
+  return picked == null ? null : todayISO(picked);
+}
 
 class Lbl extends StatelessWidget {
   const Lbl(this.text, {super.key});
@@ -221,7 +279,7 @@ class InfoRow extends StatelessWidget {
 
 // ---------- movement actions: bottom sheet on phones, dialog elsewhere ----------
 
-enum _Act { toggle, delete }
+enum _Act { toggle, edit, delete }
 
 Future<void> showMovementActions(BuildContext context, Movement mv) async {
   final app = AppScope.of(context, listen: false);
@@ -258,6 +316,7 @@ Future<void> showMovementActions(BuildContext context, Movement mv) async {
           mv.estado == 'Pago' ? s.markPlanned : (income ? s.markReceived : s.markPaid),
           () => Navigator.pop(ctx, _Act.toggle),
         ),
+        btn(s.edit, () => Navigator.pop(ctx, _Act.edit)),
         btn(s.delete, () => Navigator.pop(ctx, _Act.delete), color: Palette.neg),
         btn(s.close, () => Navigator.pop(ctx), color: Palette.muted, last: true),
       ]),
@@ -283,6 +342,8 @@ Future<void> showMovementActions(BuildContext context, Movement mv) async {
   switch (act) {
     case _Act.toggle:
       app.store.setEstado(mv.id, mv.estado == 'Pago' ? 'Previsto' : 'Pago');
+    case _Act.edit:
+      await openNova(context, editing: mv);
     case _Act.delete:
       if (await confirm(context, s.deleteMovementQ, s.delete)) app.store.removeMovement(mv.id);
     case null:

@@ -71,6 +71,26 @@ class Store extends ChangeNotifier {
     }
   }
 
+  /// Replaces a movement with an edited copy (same id).
+  void updateMovement(Movement m) {
+    final i = _state.movements.indexWhere((x) => x.id == m.id);
+    if (i < 0) return;
+    _state.movements[i] = m;
+    _commit();
+  }
+
+  /// Settles a planned movement with what was actually paid.
+  void payPlanned(String id, {required int cents, required String date}) {
+    final m = _state.movements.where((x) => x.id == id).firstOrNull;
+    if (m != null) updateMovement(m.copyWith(cents: cents, date: date, estado: 'Pago'));
+  }
+
+  /// Sets "how much is in the account today"; the opening balance is derived from it.
+  void setBalanceToday(int cents) {
+    _state.config = _state.config.copyWith(openingBalance: openingBalanceFor(_state, cents));
+    _commit();
+  }
+
   void removeMovement(String id) {
     _state.movements = _state.movements.where((m) => m.id != id).toList();
     _commit();

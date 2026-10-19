@@ -176,6 +176,7 @@ List<Movement>? syncRecurring(AppState state, String today, {Set<String> regener
     final drop = rid != null &&
         regenerate.contains(rid) &&
         m.estado == 'Previsto' &&
+        !m.edited &&
         _genCycle(m)!.compareTo(cur) >= 0;
     if (drop) changed = true;
     return !drop;
@@ -192,6 +193,32 @@ List<Movement>? syncRecurring(AppState state, String today, {Set<String> regener
     changed = true;
   }
   return changed ? movements : null;
+}
+
+// ---- Matching a payment to a planned bill ------------------------------
+
+String _norm(String s) => s.trim().toLowerCase();
+
+/// Planned (Previsto) movements in the same cycle and category that a new
+/// payment probably settles, best match first. A description that matches
+/// (or contains / is contained in) the planned one counts; an empty
+/// description, or one equal to the category name, matches any of them.
+List<Movement> matchPlanned(AppState state,
+    {required String date, required String description, required String category}) {
+  final s = state.config.cycleStartDay;
+  final cycle = cycleIdOf(date, s);
+  final d = _norm(description);
+  final anyInCategory = d.isEmpty || d == _norm(category);
+  final hits = state.movements.where((m) {
+    if (m.estado != 'Previsto' || m.category != category || cycleOfMovement(m, s) != cycle) return false;
+    final p = _norm(m.description);
+    return anyInCategory || p == d || p.contains(d) || d.contains(p);
+  }).toList()
+    ..sort((a, b) {
+      final exact = (_norm(b.description) == d ? 1 : 0) - (_norm(a.description) == d ? 1 : 0);
+      return exact != 0 ? exact : a.date.compareTo(b.date);
+    });
+  return hits;
 }
 
 // ---- Totals -----------------------------------------------------------
@@ -282,6 +309,10 @@ List<Cycle> computeCycles(AppState state, [String? today]) {
     );
   }).toList();
 }
+
+/// The opening balance that makes [cashNow] equal [balanceToday].
+int openingBalanceFor(AppState state, int balanceToday) =>
+    balanceToday - (cashNow(state) - state.config.openingBalance);
 
 // money actually in the account: opening balance + every movement marked Pago
 int cashNow(AppState state) {

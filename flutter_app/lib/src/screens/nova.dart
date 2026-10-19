@@ -7,13 +7,16 @@ import '../app_controller.dart';
 import '../i18n.dart';
 import '../layout.dart';
 import '../logic.dart';
+import '../models.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
 /// Full-screen page on phones (portrait or landscape), a centred dialog on tablets and desktop.
-Future<void> openNova(BuildContext context) {
+/// With [editing], the same form edits an existing movement.
+Future<void> openNova(BuildContext context, {Movement? editing}) {
   if (sizeClassOf(context) == SizeClass.compact || isShort(context)) {
-    return Navigator.of(context).push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => const NovaScreen()));
+    return Navigator.of(context)
+        .push(MaterialPageRoute(fullscreenDialog: true, builder: (_) => NovaScreen(editing: editing)));
   }
   final h = MediaQuery.sizeOf(context).height;
   return showDialog(
@@ -23,25 +26,26 @@ Future<void> openNova(BuildContext context) {
       insetPadding: const EdgeInsets.all(24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Palette.line2)),
       clipBehavior: Clip.antiAlias,
-      child: SizedBox(width: 460, height: math.min(h - 48, 780), child: const NovaScreen()),
+      child: SizedBox(width: 460, height: math.min(h - 48, 780), child: NovaScreen(editing: editing)),
     ),
   );
 }
 
 class NovaScreen extends StatefulWidget {
-  const NovaScreen({super.key});
+  const NovaScreen({super.key, this.editing});
+  final Movement? editing;
 
   @override
   State<NovaScreen> createState() => _NovaScreenState();
 }
 
 class _NovaScreenState extends State<NovaScreen> {
-  int _cents = 0;
-  String _cat = 'Alimentação';
-  String _estado = 'Pago';
-  String? _date;
+  late int _cents = widget.editing?.cents ?? 0;
+  late String _cat = widget.editing?.category ?? 'Alimentação';
+  late String _estado = widget.editing?.estado ?? 'Pago';
+  late String? _date = widget.editing?.date;
   String? _error;
-  final _desc = TextEditingController();
+  late final _desc = TextEditingController(text: widget.editing?.description ?? '');
 
   @override
   void dispose() {
@@ -58,31 +62,90 @@ class _NovaScreenState extends State<NovaScreen> {
         }
       });
 
-  void _save() {
+  Future<void> _save() async {
+    final app = AppScope.of(context, listen: false);
+    final s = app.s;
     if (_cents <= 0) {
-      setState(() => _error = AppScope.of(context, listen: false).s.enterAmount);
+      setState(() => _error = s.enterAmount);
       return;
     }
-    final app = AppScope.of(context, listen: false);
-    final desc = _desc.text.trim();
-    app.addMovement(
-        date: _date!, description: desc.isEmpty ? _cat : desc, category: _cat, cents: _cents, estado: _estado);
+    final typed = _desc.text.trim();
+    final desc = typed.isEmpty ? _cat : typed;
     final messenger = ScaffoldMessenger.of(context);
+    var message = s.expenseAdded;
+
+    final old = widget.editing;
+    if (old != null) {
+      app.store.updateMovement(
+          old.copyWith(date: _date, description: desc, category: _cat, cents: _cents, estado: _estado));
+      app.pickCycle(cycleOfMovement(app.store.state.movements.firstWhere((m) => m.id == old.id),
+          app.store.state.config.cycleStartDay));
+      message = s.movementUpdated;
+    } else {
+      // a payment for a bill that's already planned settles it instead of adding a duplicate
+      final matches = matchPlanned(app.store.state, date: _date!, description: typed, category: _cat);
+      String? choice = '';
+      if (matches.isNotEmpty) {
+        choice = await _askMatch(matches.take(3).toList(), app);
+        if (choice == null || !mounted) return; // dismissed: stay on the form
+      }
+      if (choice.isEmpty) {
+        app.addMovement(date: _date!, description: desc, category: _cat, cents: _cents, estado: _estado);
+      } else {
+        app.store.payPlanned(choice, cents: _cents, date: _date!);
+        app.pickCycle(cycleIdOf(_date!, app.store.state.config.cycleStartDay));
+        app.setTab(0);
+        message = s.markedPaid;
+      }
+    }
+    if (!mounted) return;
     Navigator.of(context).pop();
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(app.s.expenseAdded)));
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Returns the id of the planned movement to settle, '' for "a new expense", null if dismissed.
+  Future<String?> _askMatch(List<Movement> matches, AppController app) {
+    final s = app.s, lang = app.lang;
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Palette.surface,
+        title: Text(s.matchTitle),
+        content: SizedBox(
+          width: 400,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(s.matchBody(app.money.full(_cents)), style: const TextStyle(fontSize: 14, height: 1.4, color: Palette.muted)),
+            const SizedBox(height: 12),
+            for (final m in matches)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx, m.id),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Palette.text,
+                    side: const BorderSide(color: Palette.line2),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    alignment: Alignment.centerLeft,
+                  ),
+                  child: Row(children: [
+                    Expanded(child: Text('${m.description} · ${formatDay(m.date, lang)}', overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: 8),
+                    Text(app.money.full(m.cents), style: mono(size: 13, color: Palette.muted)),
+                  ]),
+                ),
+              ),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, ''), child: Text(s.matchNo))],
+      ),
+    );
   }
 
   Future<void> _pickDate() async {
-    final d = DateTime.parse(_date!);
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: d,
-      firstDate: DateTime(d.year - 5),
-      lastDate: DateTime(d.year + 5),
-    );
-    if (picked != null) setState(() => _date = todayISO(picked));
+    final picked = await pickDate(context, _date!);
+    if (picked != null) setState(() => _date = picked);
   }
 
   // Physical keyboard (desktop, web, tablets with keyboards): digits, backspace, enter.
@@ -111,7 +174,9 @@ class _NovaScreenState extends State<NovaScreen> {
     final lang = app.lang;
     final m = app.model;
     _date ??= m.today;
-    final cats = m.state.categories.where((c) => c.type == 'Saída');
+    // a new entry is an expense; when editing, keep the movement's side (income / expense)
+    final editingIncome = widget.editing != null && m.isIncome(widget.editing!.category);
+    final cats = m.state.categories.where((c) => (c.type == 'Entrada') == editingIncome);
 
     final fields = <Widget>[
       const SizedBox(height: 14),
@@ -190,7 +255,7 @@ class _NovaScreenState extends State<NovaScreen> {
                   onPressed: () => Navigator.of(context).pop(),
                 ),
                 Expanded(
-                  child: Text(s.newExpense,
+                  child: Text(widget.editing == null ? s.newExpense : s.editMovement,
                       textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(width: 48),
@@ -200,7 +265,12 @@ class _NovaScreenState extends State<NovaScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: LayoutBuilder(builder: (context, c) {
                     final keyH = c.maxHeight < 600 ? 44.0 : 52.0;
-                    final pad = _Keypad(keyHeight: keyH, onKey: _key, onSave: _save, s: s);
+                    final pad = _Keypad(
+                        keyHeight: keyH,
+                        onKey: _key,
+                        onSave: _save,
+                        s: s,
+                        label: widget.editing == null ? s.addExpense : s.saveChanges);
                     // landscape phones / short windows: fields and keypad side by side
                     if (c.maxWidth >= 600 && c.maxHeight < 520) {
                       return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -267,8 +337,10 @@ class _Segmented extends StatelessWidget {
 }
 
 class _Keypad extends StatelessWidget {
-  const _Keypad({required this.keyHeight, required this.onKey, required this.onSave, required this.s});
+  const _Keypad(
+      {required this.keyHeight, required this.onKey, required this.onSave, required this.s, required this.label});
   final S s;
+  final String label;
   final double keyHeight;
   final ValueChanged<String> onKey;
   final VoidCallback onSave;
@@ -321,7 +393,7 @@ class _Keypad extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
-            child: Text(s.addExpense),
+            child: Text(label),
           ),
         ),
       ]);

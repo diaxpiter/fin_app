@@ -33,6 +33,7 @@ class OnboardingScreen extends StatelessWidget {
       PrefRow(label: s.language, child: const LanguagePicker()),
       PrefRow(label: s.currency, child: const CurrencyPicker()),
       PrefRow(label: s.monthStartsOn, hint: s.startDayHint, child: const StartDayPicker()),
+      PrefRow(label: s.balanceQ, hint: s.balanceHint, child: const BalanceButton()),
       const SizedBox(height: 20),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Lbl(s.billsTitle),

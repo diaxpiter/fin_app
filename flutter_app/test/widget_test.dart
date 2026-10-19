@@ -5,6 +5,7 @@ import 'package:fin_app/main.dart';
 import 'package:fin_app/src/account.dart';
 import 'package:fin_app/src/app_controller.dart';
 import 'package:fin_app/src/store.dart';
+import 'package:fin_app/src/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,6 +25,8 @@ Future<void> pumpAt(WidgetTester tester, Size size, {String? language = 'pt'}) a
 void main() {
   group('bills', billTests);
   group('language and currency', languageTests);
+  group('editing, balance, matching', editingTests);
+  group('typed inputs and calendars', inputTests);
 
   const sizes = {
     'small phone': Size(320, 640),
@@ -106,5 +109,120 @@ void languageTests() {
   testWidgets('follows the device language until one is chosen', (tester) async {
     await pumpAt(tester, const Size(390, 844), language: null); // test devices are English
     expect(find.text('Home'), findsOneWidget);
+  });
+}
+
+void editingTests() {
+  testWidgets('edit a movement from its action sheet', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.format_list_bulleted).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Internet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Editar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Editar movimento'), findsOneWidget);
+    for (var i = 0; i < 6; i++) {
+      await tester.tap(find.byIcon(Icons.backspace_outlined));
+    }
+    await tester.tap(find.text('3').last);
+    await tester.tap(find.text('00').last);
+    await tester.tap(find.text('00').last);
+    await tester.tap(find.text('Guardar alterações'));
+    await tester.pumpAndSettle();
+    expect(find.text('Movimento atualizado'), findsOneWidget);
+    expect(find.text('−300,00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('paying a planned bill asks to settle it instead of duplicating', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byTooltip('Nova despesa'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Moradia'));
+    await tester.enterText(find.byType(TextField), 'Luz');
+    for (final k in ['5', '2', '3', '0']) {
+      await tester.tap(find.text(k).last);
+    }
+    await tester.tap(find.text('Adicionar despesa'));
+    await tester.pumpAndSettle();
+    expect(find.text('É uma conta prevista?'), findsOneWidget);
+    await tester.tap(find.textContaining('Luz ·'));
+    await tester.pumpAndSettle();
+    expect(find.text('Conta marcada como paga'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tap "Em conta" to set today\'s balance', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.text('EM CONTA'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quanto tens hoje na conta?'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '1.234,56');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.text('1.234,56'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+void inputTests() {
+  test('money fields keep only digits and separators', () {
+    TextEditingValue type(String t, {bool signed = false}) => MoneyInputFormatter(signed: signed)
+        .formatEditUpdate(const TextEditingValue(text: '12'), TextEditingValue(text: t));
+    expect(type('12,5').text, '12,5');
+    expect(type('1.234,56').text, '1.234,56');
+    expect(type('12a').text, '12', reason: 'letters rejected');
+    expect(type('12 €').text, '12', reason: 'symbols rejected');
+    expect(type('-12').text, '12', reason: 'no minus unless signed');
+    expect(type('-12', signed: true).text, '-12');
+    expect(type('1-2', signed: true).text, '12', reason: 'minus only at the start');
+  });
+
+  testWidgets('bill form: letters are ignored, dates come from a calendar', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.repeat).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nova'));
+    await tester.pumpAndSettle();
+
+    final amount = find.widgetWithText(TextField, 'Valor');
+    await tester.enterText(amount, 'abc');
+    expect(tester.widget<TextField>(amount).controller!.text, isEmpty);
+    await tester.enterText(amount, '45,90');
+    expect(tester.widget<TextField>(amount).controller!.text, '45,90');
+
+    // first payment: the calendar opens; picking the 12th sets the day of the month
+    await tester.tap(find.text('Primeiro pagamento'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    await tester.tap(find.text('12'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('12 nov 2026'), findsOneWidget);
+
+    // last payment before the first is refused: the last-payment calendar opens a year ahead
+    // (Oct 2027); then move the first payment to Dec 2027
+    await tester.tap(find.text('Último pagamento'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Primeiro pagamento'));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 13; i++) {
+      await tester.tap(find.descendant(of: find.byType(DatePickerDialog), matching: find.byIcon(Icons.chevron_right)));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.descendant(of: find.byType(DatePickerDialog), matching: find.text('12')));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('12 dez 2027'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Descrição'), 'Seguro');
+    await tester.ensureVisible(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.text('O último pagamento não pode ser antes do primeiro.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
