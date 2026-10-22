@@ -31,20 +31,31 @@ Finder get dateButton => find.byIcon(Icons.calendar_today_outlined);
 
 /// The test font draws every glyph as a square, so "Alimentação" is twice as wide as on a
 /// phone. Layout checks load the real Roboto that ships with the Flutter SDK.
-final _roboto = Directory('${Platform.environment['FLUTTER_ROOT']}/bin/cache/artifacts/material_fonts');
+/// File names differ in case between SDK installs (roboto-regular.ttf / Roboto-Regular.ttf).
+List<File> _robotoFiles() {
+  final dir = Directory('${Platform.environment['FLUTTER_ROOT']}/bin/cache/artifacts/material_fonts');
+  if (!dir.existsSync()) return [];
+  const wanted = {'roboto-regular.ttf', 'roboto-medium.ttf', 'roboto-bold.ttf'};
+  return dir
+      .listSync()
+      .whereType<File>()
+      .where((f) => wanted.contains(f.uri.pathSegments.last.toLowerCase()))
+      .toList();
+}
 
-Future<void> loadRoboto() async {
+Future<void> loadRoboto(List<File> files) async {
   final loader = FontLoader('Roboto');
-  for (final w in ['regular', 'medium', 'bold']) {
-    loader.addFont(File('${_roboto.path}/roboto-$w.ttf').readAsBytes().then(ByteData.sublistView));
+  for (final f in files) {
+    loader.addFont(f.readAsBytes().then(ByteData.sublistView));
   }
   await loader.load();
 }
 
 void main() {
-  final hasRoboto = _roboto.existsSync();
+  final roboto = _robotoFiles();
+  final hasRoboto = roboto.length == 3; // otherwise the layout checks are skipped
   setUpAll(() async {
-    if (hasRoboto) await loadRoboto();
+    if (hasRoboto) await loadRoboto(roboto);
   });
 
   // iPhone SE / 8, a common Android size, iPhone 15
