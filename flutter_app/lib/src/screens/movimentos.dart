@@ -6,6 +6,7 @@ import '../logic.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'importar.dart';
 
 class MovimentosScreen extends StatelessWidget {
   const MovimentosScreen({super.key});
@@ -17,9 +18,15 @@ class MovimentosScreen extends StatelessWidget {
     final m = app.model;
     final c = m.cycle;
     final acc = app.accountFilter;
-    final items = c.items.where((x) =>
+    final q = app.search.trim().toLowerCase();
+    final searching = q.isNotEmpty;
+    // a search looks through every cycle, newest first
+    final Iterable<Movement> source =
+        searching ? sortMovements(m.state.movements, typesOf(m.state)).reversed : c.items;
+    final items = source.where((x) =>
         (app.filter == 'Todos' || x.estado == app.filter) &&
-        (acc == null || (x.account ?? m.state.defaultAccount) == acc || x.toAccount == acc));
+        (acc == null || (x.account ?? m.state.defaultAccount) == acc || x.toAccount == acc) &&
+        (!searching || x.description.toLowerCase().contains(q) || s.category(x.category).toLowerCase().contains(q)));
     final groups = <(String, List<Movement>)>[];
     for (final it in items) {
       if (groups.isNotEmpty && groups.last.$1 == it.date) {
@@ -32,11 +39,31 @@ class MovimentosScreen extends StatelessWidget {
     return ScreenList(
       maxWidth: 760,
       children: [
-        TopRow(children: [H1(s.navMovements), CyclePicker(m)]),
+        TopRow(children: [
+          H1(s.navMovements),
+          IconButton(
+            tooltip: s.importStatement,
+            color: Palette.muted,
+            icon: const Icon(Icons.upload_file),
+            onPressed: () => openImport(context),
+          ),
+          CyclePicker(m),
+        ]),
         const SizedBox(height: 6),
         Text('${cycleLabel(c.id, app.lang)} · ${s.movementCount(c.items.length)}',
             style: mono(size: 12, color: Palette.muted)),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
+        TextField(
+          key: const ValueKey('search'),
+          onChanged: app.setSearch,
+          decoration: InputDecoration(
+            hintText: s.searchHint,
+            prefixIcon: const Icon(Icons.search, size: 20),
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 14),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(children: [
@@ -68,7 +95,7 @@ class MovimentosScreen extends StatelessWidget {
         if (groups.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 16),
-            child: Text(s.noMovements, style: const TextStyle(fontSize: 14, color: Palette.muted)),
+            child: Text(searching ? s.noMatches : s.noMovements, style: const TextStyle(fontSize: 14, color: Palette.muted)),
           ),
         for (final (date, list) in groups) ...[
           const SizedBox(height: 22),

@@ -1,6 +1,6 @@
 # Painel Financeiro — Flutter
 
-The same app as the PWA in the repo root, built with Flutter so it runs natively on
+Built with Flutter so it runs natively on
 **Android, iOS, web, Windows, macOS and Linux**, and adapts to any screen size.
 
 ## How it adapts

@@ -15,6 +15,9 @@ class FakeBackend implements Backend {
   final FakeServer server;
   String? _user;
   bool offline = false;
+
+  /// Runs while an upload is in flight (for testing edits made mid-sync).
+  Future<void> Function()? beforeUpdate;
   final _events = StreamController<BackendEvent>.broadcast();
 
   void emit(BackendEvent e) => _events.add(e);
@@ -85,6 +88,7 @@ class FakeBackend implements Backend {
   @override
   Future<bool> updateVault({required int expectedVersion, String? ciphertext, String? wrappedKeyPassword}) async {
     _net();
+    await beforeUpdate?.call();
     final v = server.vaults[_user!]!;
     if (v.version != expectedVersion) return false;
     server.vaults[_user!] = VaultRow(

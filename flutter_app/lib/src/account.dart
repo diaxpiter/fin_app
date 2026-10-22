@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backend.dart';
 import 'crypto.dart' as crypto;
+import 'merge.dart';
 import 'models.dart';
 import 'seed.dart';
 import 'store.dart';
@@ -40,7 +41,7 @@ enum SyncState { idle, syncing, offline }
 
 enum Notice { syncConflict }
 
-const minPasswordLength = 10;
+const minPasswordLength = 12;
 
 class AccountController extends ChangeNotifier {
   AccountController({
@@ -58,7 +59,9 @@ class AccountController extends ChangeNotifier {
   final int iterations;
 
   static const _kMode = 'account_mode', _kKey = 'account_key', _kVersion = 'account_version', _kDirty = 'account_dirty';
-  static const _kOnboarding = 'account_onboarding';
+  static const _kOnboarding = 'account_onboarding', _kOnboarded = 'account_onboarded';
+  static const _kBase = 'account_base', _kRescue = 'account_rescue', _kEmail = 'account_email';
+  static const _kSessionOnly = 'account_session_only';
 
   AccountStatus status = AccountStatus.signedOut;
   SyncState sync = SyncState.idle;
@@ -71,6 +74,15 @@ class AccountController extends ChangeNotifier {
   SecretKey? _dataKey;
   int _version = 0;
   bool _dirty = false, _applying = false, _busy = false, _again = false;
+
+  /// The last copy both this device and the server agreed on: the base for merging after a conflict.
+  AppState? _base;
+
+  /// Counts local edits, so one made while a push is in flight is not mistaken for synced.
+  int _rev = 0, _conflicts = 0;
+
+  /// False on a shared device: the key and data are not kept on it, and signing in is needed after a reload.
+  bool rememberDevice = true;
   Timer? _debounce;
   StreamSubscription<BackendEvent>? _sub;
 
@@ -80,11 +92,20 @@ class AccountController extends ChangeNotifier {
   /// True when this device was used without an account before (offer to keep that data).
   bool get wasGuest => _prefs?.getString(_kMode) == 'guest';
 
-  /// A brand-new account still has to go through the fixed-bills step.
-  bool get needsOnboarding => status == AccountStatus.unlocked && (_prefs?.getBool(_kOnboarding) ?? false);
+  /// A brand-new account, or a guest on a device with nothing in it, still has to go through the first-run setup.
+  bool get needsOnboarding =>
+      (status == AccountStatus.unlocked || status == AccountStatus.guest) && (_prefs?.getBool(_kOnboarding) ?? false);
+
+  /// Arms the setup once for an empty guest; a latch, so it stays open while the user fills the plan in.
+  void _armGuestSetup() {
+    final p = _prefs;
+    if (p == null || (p.getBool(_kOnboarded) ?? false) || p.containsKey(_kOnboarding)) return;
+    if (store.state.recurring.isEmpty && store.state.movements.isEmpty) p.setBool(_kOnboarding, true);
+  }
 
   Future<void> finishOnboarding() async {
     await _prefs?.remove(_kOnboarding);
+    await _prefs?.setBool(_kOnboarded, true);
     notifyListeners();
   }
 
@@ -104,14 +125,24 @@ class AccountController extends ChangeNotifier {
       _dataKey = SecretKey(base64.decode(key));
       _version = _prefs?.getInt(_kVersion) ?? 0;
       _dirty = _prefs?.getBool(_kDirty) ?? false;
+      _base = _readBase();
       status = AccountStatus.unlocked;
       unawaited(pull());
     } else if (key != null) {
-      // session gone (signed out elsewhere / expired): don't keep account data around
+      // session gone (signed out elsewhere / expired): don't keep account data around,
+      // except edits that never reached the server: they are merged in at the next sign-in
+      final rescue = _rescue();
+      await _wipe();
+      if (rescue != null) await _prefs?.setString(_kRescue, rescue);
+      status = AccountStatus.signedOut;
+    } else if (b != null && b.hasSession && (_prefs?.getBool(_kSessionOnly) ?? false)) {
+      // shared-device session: nothing was kept, so the login has to be repeated
+      await b.signOut();
       await _wipe();
       status = AccountStatus.signedOut;
     } else {
       status = b == null || wasGuest ? AccountStatus.guest : AccountStatus.signedOut;
+      if (status == AccountStatus.guest) _armGuestSetup();
     }
     notifyListeners();
   }
@@ -123,7 +154,9 @@ class AccountController extends ChangeNotifier {
         notifyListeners();
       case BackendEvent.signedOut:
         if (status == AccountStatus.unlocked || status == AccountStatus.setup) {
-          unawaited(_wipe().then((_) {
+          final rescue = _rescue();
+          unawaited(_wipe().then((_) async {
+            if (rescue != null) await _prefs?.setString(_kRescue, rescue);
             status = AccountStatus.signedOut;
             notifyListeners();
           }));
@@ -155,6 +188,7 @@ class AccountController extends ChangeNotifier {
   void continueAsGuest() {
     _prefs?.setString(_kMode, 'guest');
     status = AccountStatus.guest;
+    _armGuestSetup();
     notifyListeners();
   }
 
@@ -202,18 +236,71 @@ class AccountController extends ChangeNotifier {
   }
 
   Future<void> _unlock(SecretKey dk, VaultRow v) async {
-    final state = AppState.fromJson(await crypto.decryptJson(dk, v.ciphertext));
+    var state = AppState.fromJson(await crypto.decryptJson(dk, v.ciphertext));
     _dataKey = dk;
     _version = v.version;
     _dirty = false;
+    _base = _copy(state);
+    final email = backend?.email?.toLowerCase();
     await _prefs?.setString(_kMode, 'account');
-    await _prefs?.setString(_kKey, base64.encode(await dk.extractBytes()));
+    await _prefs?.setString(_kEmail, email ?? '');
+    if (rememberDevice) {
+      await _prefs?.setString(_kKey, base64.encode(await dk.extractBytes()));
+      await _prefs?.remove(_kSessionOnly);
+    } else {
+      await _prefs?.remove(_kKey);
+      await _prefs?.setBool(_kSessionOnly, true);
+    }
+    store.persist = rememberDevice;
+    // edits from an earlier session that never reached the server: merge them back in
+    final rescued = _takeRescue(email);
+    if (rescued != null) {
+      state = mergeStates(emptyState(), rescued, state);
+      _dirty = true;
+    }
     await _persistSync();
+    _persistBase();
     _apply(state);
     status = AccountStatus.unlocked;
     sync = SyncState.idle;
     store.ensureRecurring(); // roll the bills forward to this month (syncs if anything was added)
     notifyListeners();
+    if (_dirty) unawaited(push());
+  }
+
+  /// The store edits its state in place, so the merge base has to be a separate copy.
+  static AppState _copy(AppState s) => AppState.fromJson(s.toJson());
+
+  AppState? _readBase() {
+    try {
+      final raw = _prefs?.getString(_kBase);
+      return raw == null ? null : AppState.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _persistBase() {
+    if (!rememberDevice || _base == null) return;
+    _prefs?.setString(_kBase, jsonEncode(_base!.toJson()));
+  }
+
+  /// Unsynced edits as JSON, for [_kRescue]; null when there is nothing to save or the device is shared.
+  String? _rescue() {
+    if (!_dirty || !rememberDevice) return null;
+    return jsonEncode({'email': _prefs?.getString(_kEmail) ?? '', 'state': store.state.toJson()});
+  }
+
+  AppState? _takeRescue(String? email) {
+    final raw = _prefs?.getString(_kRescue);
+    if (raw == null) return null;
+    _prefs?.remove(_kRescue);
+    try {
+      final j = jsonDecode(raw) as Map;
+      return j['email'] == email ? AppState.fromJson(j['state']) : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---------------- recovery ----------------
@@ -252,12 +339,19 @@ class AccountController extends ChangeNotifier {
 
   // ---------------- sign out / delete ----------------
 
-  Future<void> signOut() async {
-    if (_dirty) await push(); // best effort: don't lose the last change
+  /// Returns false, and signs out of nothing, when changes on this device haven't reached the
+  /// server (offline): ask the user, then call again with [force].
+  Future<bool> signOut({bool force = false}) async {
+    if (_dirty) {
+      await push();
+      if (_dirty && !force) return false;
+    }
+    _dirty = false;
     await backend?.signOut();
     await _wipe();
     status = AccountStatus.signedOut;
     notifyListeners();
+    return true;
   }
 
   /// Deletes the account and its vault on the server, then this device's copy.
@@ -280,6 +374,13 @@ class AccountController extends ChangeNotifier {
     await _prefs?.remove(_kDirty);
     await _prefs?.remove(_kMode);
     await _prefs?.remove(_kOnboarding);
+    await _prefs?.remove(_kOnboarded);
+    await _prefs?.remove(_kBase);
+    await _prefs?.remove(_kRescue);
+    await _prefs?.remove(_kEmail);
+    await _prefs?.remove(_kSessionOnly);
+    _base = null;
+    store.persist = true;
     _apply(emptyState());
   }
 
@@ -296,6 +397,7 @@ class AccountController extends ChangeNotifier {
 
   void _onStoreChanged() {
     if (_applying || status != AccountStatus.unlocked) return;
+    _rev++;
     _dirty = true;
     _prefs?.setBool(_kDirty, true);
     _debounce?.cancel();
@@ -322,14 +424,20 @@ class AccountController extends ChangeNotifier {
     _busy = true;
     _setSync(SyncState.syncing);
     try {
-      final ok = await backend!.updateVault(
-          expectedVersion: _version, ciphertext: await crypto.encryptJson(_dataKey!, store.state.toJson()));
+      final rev = _rev, snapshot = store.state.toJson();
+      final ok = await backend!
+          .updateVault(expectedVersion: _version, ciphertext: await crypto.encryptJson(_dataKey!, snapshot));
       if (ok) {
         _version++;
-        _dirty = false;
+        _conflicts = 0;
+        _dirty = _rev != rev; // edited while uploading: still unsynced
+        _base = AppState.fromJson(snapshot);
         await _persistSync();
+        _persistBase();
+        if (_dirty) _again = true;
       } else {
-        await _pullRemote();
+        await _pullRemote(); // merges the other device's changes with ours
+        if (++_conflicts <= 3) _again = true; // and uploads the result (bounded: a bad server can't spin this)
       }
       _setSync(SyncState.idle);
     } catch (_) {
@@ -362,19 +470,32 @@ class AccountController extends ChangeNotifier {
   Future<void> _pullRemote() async {
     final v = await backend!.fetchVault();
     if (v == null || v.version == _version || _dataKey == null) return;
-    final state = AppState.fromJson(await crypto.decryptJson(_dataKey!, v.ciphertext));
-    if (_dirty) _notice = Notice.syncConflict;
+    if (v.version < _version) return; // older than what this device already holds: a replayed copy, ignore
+    final remote = AppState.fromJson(await crypto.decryptJson(_dataKey!, v.ciphertext));
     _version = v.version;
-    _dirty = false;
+    if (_dirty) {
+      _apply(mergeStates(_base ?? emptyState(), store.state, remote));
+      _notice = Notice.syncConflict;
+    } else {
+      _apply(remote);
+    }
+    _base = _copy(remote);
     await _persistSync();
-    _apply(state);
+    _persistBase();
   }
 
   void _checkPassword(String p) {
     if (p.length < minPasswordLength) {
       throw const BackendError(ErrorCode.shortPassword, min: minPasswordLength);
     }
+    // everything rests on this password if the database ever leaks: refuse the obvious ones
+    final lower = p.toLowerCase();
+    if (p.split('').toSet().length < 5 || (p.length < 16 && _common.any(lower.contains))) {
+      throw const BackendError(ErrorCode.weakPassword);
+    }
   }
+
+  static const _common = ['password', 'passw0rd', '123456', 'qwerty', 'abcdef', 'letmein', 'iloveyou', 'welcome', 'palavrapasse'];
 
   @override
   void dispose() {

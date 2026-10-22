@@ -12,12 +12,13 @@ import 'src/i18n.dart';
 import 'src/layout.dart';
 import 'src/screens/ajustes.dart';
 import 'src/screens/auth.dart';
-import 'src/screens/fixas.dart';
+import 'src/screens/categorias.dart';
 import 'src/screens/home.dart';
 import 'src/screens/movimentos.dart';
 import 'src/screens/nova.dart';
 import 'src/screens/onboarding.dart';
-import 'src/screens/previsao.dart';
+import 'src/screens/plano.dart';
+import 'src/screens/poupanca.dart';
 import 'src/store.dart';
 import 'src/theme.dart';
 import 'src/widgets.dart';
@@ -105,7 +106,7 @@ class _AccountGateState extends State<AccountGate> {
       AccountStatus.signedOut => const AuthScreen(),
       AccountStatus.setup => const SetupScreen(),
       AccountStatus.recovering => const RecoveryScreen(),
-      AccountStatus.unlocked when account.needsOnboarding => const OnboardingScreen(),
+      AccountStatus.unlocked || AccountStatus.guest when account.needsOnboarding => const OnboardingScreen(),
       AccountStatus.guest || AccountStatus.unlocked => const Shell(),
     };
   }
@@ -114,8 +115,9 @@ class _AccountGateState extends State<AccountGate> {
 List<(IconData, IconData, String)> _destinations(S s) => [
       (Icons.home_outlined, Icons.home, s.navHome),
       (Icons.format_list_bulleted, Icons.format_list_bulleted, s.navMovements),
-      (Icons.bar_chart_outlined, Icons.bar_chart, s.navForecast),
-      (Icons.repeat, Icons.repeat, s.navBills),
+      (Icons.pie_chart_outline, Icons.pie_chart, s.navCategories),
+      (Icons.savings_outlined, Icons.savings, s.navSavings),
+      (Icons.event_note_outlined, Icons.event_note, s.navPlan),
     ];
 
 /// Navigation adapts to the window: bottom bar on phones, rail on tablets,
@@ -123,7 +125,7 @@ List<(IconData, IconData, String)> _destinations(S s) => [
 class Shell extends StatelessWidget {
   const Shell({super.key});
 
-  static const _pages = [HomeScreen(), MovimentosScreen(), PrevisaoScreen(), FixasScreen()];
+  static const _pages = [HomeScreen(), MovimentosScreen(), CategoriasScreen(), PoupancaScreen(), PlanoScreen()];
 
   @override
   Widget build(BuildContext context) {

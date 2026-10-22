@@ -274,6 +274,31 @@ class _NovaScreenState extends State<NovaScreen> {
     return KeyEventResult.ignored;
   }
 
+  /// The user's regular expenses as chips: one tap fills the amount, category and description.
+  List<Widget> _frequentChips(AppController app, AppState state, String today) {
+    final frequent = frequentExpenses(state, today);
+    if (frequent.isEmpty) return const [];
+    return [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Wrap(spacing: 8, runSpacing: 6, children: [
+          for (final f in frequent)
+            ActionChip(
+              visualDensity: VisualDensity.compact,
+              label: Text('${f.description} · ${app.money.amount(f.cents)}', style: const TextStyle(fontSize: 12)),
+              onPressed: () => setState(() {
+                _error = null;
+                _cents = f.cents;
+                _cat = f.category;
+                _desc.text = f.description;
+              }),
+            ),
+        ]),
+      ),
+      const SizedBox(height: 10),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
@@ -345,6 +370,7 @@ class _NovaScreenState extends State<NovaScreen> {
           child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Palette.neg, fontSize: 13)),
         ),
       const SizedBox(height: 14),
+      if (widget.editing == null && kind == _Kind.expense) ..._frequentChips(app, state, m.today),
       AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.only(bottom: 10),

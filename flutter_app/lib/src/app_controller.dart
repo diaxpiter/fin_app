@@ -46,6 +46,22 @@ class AppController extends ChangeNotifier {
   }
   int tab = 0;
 
+  /// Movimentos lists matches from every cycle when this is not empty.
+  String search = '';
+
+  void setSearch(String v) {
+    search = v;
+    notifyListeners();
+  }
+
+  /// Plano shows the forecast (0) or the fixed bills (1).
+  int planView = 0;
+
+  void setPlanView(int v) {
+    planView = v;
+    notifyListeners();
+  }
+
   String get today => todayISO(_clock());
 
   /// Device language, used until the user picks one. Tests can override it.

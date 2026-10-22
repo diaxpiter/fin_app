@@ -4,10 +4,12 @@
 import 'package:fin_app/main.dart';
 import 'package:fin_app/src/account.dart';
 import 'package:fin_app/src/app_controller.dart';
+import 'package:fin_app/src/seed.dart';
 import 'package:fin_app/src/store.dart';
 import 'package:fin_app/src/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> pumpAt(WidgetTester tester, Size size, {String? language = 'pt', DateTime? now}) async {
   tester.view.physicalSize = size;
@@ -22,12 +24,24 @@ Future<void> pumpAt(WidgetTester tester, Size size, {String? language = 'pt', Da
   await tester.pumpAndSettle();
 }
 
+/// Plano holds the forecast and the fixed bills: open the bills.
+Future<void> openFixas(WidgetTester tester) async {
+  await tester.tap(find.byIcon(Icons.event_note_outlined).first);
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(PillChip, 'Fixas'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('bills', billTests);
   group('language and currency', languageTests);
   group('editing, balance, matching', editingTests);
   group('typed inputs and calendars', inputTests);
   group('accounts', accountTests);
+  group('budgets', budgetTests);
+  group('home', homeTests);
+  group('everyday', everydayTests);
+  group('categories and first run', categoryUiTests);
 
   const sizes = {
     'small phone': Size(320, 640),
@@ -42,7 +56,13 @@ void main() {
       await pumpAt(tester, size);
       expect(find.byType(size.width < 600 ? NavigationBar : NavigationRail), findsOneWidget);
       // tap by icon: the short landscape rail hides labels
-      for (final icon in [Icons.format_list_bulleted, Icons.bar_chart_outlined, Icons.repeat, Icons.home_outlined]) {
+      for (final icon in [
+        Icons.format_list_bulleted,
+        Icons.pie_chart_outline,
+        Icons.savings_outlined,
+        Icons.event_note_outlined,
+        Icons.home_outlined
+      ]) {
         await tester.tap(find.byIcon(icon).first);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
@@ -66,8 +86,7 @@ void main() {
 void billTests() {
   testWidgets('add a fixed bill from Fixas (dot as decimal point)', (tester) async {
     await pumpAt(tester, const Size(390, 844));
-    await tester.tap(find.byIcon(Icons.repeat).first);
-    await tester.pumpAndSettle();
+    await openFixas(tester);
     await tester.tap(find.text('Nova'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Descrição'), 'Seguro');
@@ -79,11 +98,152 @@ void billTests() {
   });
 }
 
+void budgetTests() {
+  testWidgets('set a budget in Categorias and see the warning on Início', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    expect(find.text('LIVRE PARA GASTAR'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.pie_chart_outline).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Moradia'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '300');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('excedeu o orçamento'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.home_outlined).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Moradia: excedeu o orçamento'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+void everydayTests() {
+  testWidgets('create a savings goal and see it with its progress', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.savings_outlined).first);
+    await tester.pumpAndSettle();
+    expect(find.text('PATRIMÓNIO'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Nova meta'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Nome da meta'), 'Férias');
+    await tester.enterText(find.widgetWithText(TextField, 'Valor a atingir'), '900');
+    await tester.enterText(find.widgetWithText(TextField, 'Guardar por ciclo'), '100');
+    await tester.enterText(find.widgetWithText(TextField, 'Já tenho'), '300');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Férias'), findsOneWidget);
+    expect(find.text('300,00 / 900,00'), findsOneWidget);
+    expect(find.textContaining('por ciclo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a goal needs a name and an amount', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.savings_outlined).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Nova meta'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dá um nome à meta.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('import a bank file: the rent is settled, the coffee is added', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.format_list_bulleted).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.upload_file));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byType(TextField),
+        'Data;Descrição;Montante;Saldo\n'
+        '24-10-2026;TRF SENHORIO;-250,00;1.000,00\n'
+        '25-10-2026;CAFE CENTRAL;-1,20;998,80\n');
+    await tester.tap(find.text('Analisar texto'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Marca «Renda» como pago'), findsOneWidget);
+    expect(find.text('Importar 2 movimentos'), findsOneWidget);
+    await tester.tap(find.text('Importar 2 movimentos'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 movimentos importados'), findsOneWidget);
+    final store = AppScope.of(tester.element(find.byType(Scaffold).first), listen: false).store;
+    expect(store.state.movements.firstWhere((m) => m.description == 'Renda').estado, 'Pago');
+    expect(store.state.movements.any((m) => m.description == 'CAFE CENTRAL' && m.estado == 'Pago'), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an unreadable file is explained', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.format_list_bulleted).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.upload_file));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'isto não é um extrato');
+    await tester.tap(find.text('Analisar texto'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Não reconheci este formato'), findsOneWidget);
+  });
+
+  testWidgets('search looks through every cycle', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.format_list_bulleted).first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('search')), 'klarna');
+    await tester.pumpAndSettle();
+    expect(find.text('Klarna'), findsWidgets);
+    expect(find.text('Renda'), findsNothing);
+    await tester.enterText(find.byKey(const ValueKey('search')), 'zzzz');
+    await tester.pumpAndSettle();
+    expect(find.text('Nada encontrado.'), findsOneWidget);
+  });
+
+  testWidgets('Plano switches between the forecast and the fixed bills', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.event_note_outlined).first);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(PillChip, 'Previsão'), findsOneWidget);
+    await tester.tap(find.widgetWithText(PillChip, 'Fixas'));
+    await tester.pumpAndSettle();
+    expect(find.text('SUBSCRIÇÕES'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Categorias offers budgets worked out from what was spent', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.pie_chart_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Quanto devias gastar?'), findsOneWidget);
+    await tester.tap(find.textContaining('Definir 3 orçamentos'));
+    await tester.pumpAndSettle();
+    expect(find.text('ORÇAMENTO DO CICLO'), findsOneWidget);
+    expect(find.text('Quanto devias gastar?'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+void homeTests() {
+  testWidgets('before the cycle starts, Início still shows what is safe to spend', (tester) async {
+    await pumpAt(tester, const Size(390, 844), now: DateTime(2026, 10, 22));
+    expect(find.text('LIVRE PARA GASTAR'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a guest with data and no backup is reminded to save one', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    expect(find.textContaining('Sem cópia de segurança'), findsOneWidget);
+    await tester.tap(find.textContaining('Sem cópia de segurança'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ajustes'), findsOneWidget); // the Ajustes page opened
+    expect(tester.takeException(), isNull);
+  });
+}
+
 void languageTests() {
   testWidgets('switch to English and US dollars from Ajustes', (tester) async {
     await pumpAt(tester, const Size(390, 844));
     expect(find.text('Movimentos'), findsOneWidget);
-    expect(find.text('€'), findsOneWidget); // after the big amount in Portuguese
+    expect(find.text('€'), findsNWidgets(2)); // after each big amount (safe to spend, left this cycle)
 
     await tester.tap(find.byIcon(Icons.tune));
     await tester.pumpAndSettle();
@@ -102,7 +262,7 @@ void languageTests() {
 
     expect(find.text('Transactions'), findsOneWidget);
     expect(find.text('LEFT THIS CYCLE'), findsOneWidget); // section labels are upper-case
-    expect(find.text(r'$'), findsOneWidget);
+    expect(find.text(r'$'), findsNWidgets(2));
     expect(find.text('239.06'), findsWidgets, reason: 'English number style (leftover and lowest balance)');
     expect(tester.takeException(), isNull);
   });
@@ -185,8 +345,7 @@ void inputTests() {
 
   testWidgets('bill form: letters are ignored, dates come from a calendar', (tester) async {
     await pumpAt(tester, const Size(390, 844));
-    await tester.tap(find.byIcon(Icons.repeat).first);
-    await tester.pumpAndSettle();
+    await openFixas(tester);
     await tester.tap(find.text('Nova'));
     await tester.pumpAndSettle();
 
@@ -265,5 +424,64 @@ void accountTests() {
     expect(find.text('Revolut'), findsWidgets);
     expect(find.text('150,00'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+}
+
+void categoryUiTests() {
+  testWidgets('add a category and delete another on Categorias', (tester) async {
+    await pumpAt(tester, const Size(390, 844));
+    await tester.tap(find.byIcon(Icons.pie_chart_outline).first);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -3000));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nova categoria').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Animais');
+    await tester.tap(find.text('Guardar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Animais'), findsWidgets);
+
+    await tester.tap(find.byTooltip('Apagar').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Apagar'), findsWidgets);
+    await tester.tap(find.widgetWithText(TextButton, 'Apagar'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an empty guest device starts with the setup, and Concluir opens the app', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final store = Store.memory(emptyState())..setLanguage('pt');
+    final app = AppController(store, clock: () => DateTime(2026, 11, 1));
+    final account = AccountController(store: store, backend: null, prefs: prefs);
+    await account.init();
+    await tester.pumpWidget(FinApp(controller: app, account: account));
+    await tester.pumpAndSettle();
+    expect(find.text('Vamos preparar o teu painel'), findsOneWidget);
+    // the setup stays open while the plan is being filled in
+    store.addCategory('Animais', 'Saída', '#7AA2F7');
+    await tester.pumpAndSettle();
+    expect(find.text('Vamos preparar o teu painel'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Saltar por agora'), 400, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Saltar por agora'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationBar), findsOneWidget);
+
+    // not shown again
+    final again = AccountController(store: store, backend: null, prefs: prefs);
+    await again.init();
+    expect(again.needsOnboarding, isFalse);
+  });
+
+  testWidgets('a guest who already has data does not get the setup', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final account = AccountController(store: Store.memory(), backend: null, prefs: prefs);
+    await account.init();
+    expect(account.needsOnboarding, isFalse);
   });
 }

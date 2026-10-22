@@ -63,7 +63,7 @@ class Money {
 /// Reads an amount typed in any common style: "1.234,56", "1,234.56", "35", "35.5", "12,90 €".
 int? parseAmount(String text) {
   final t = text.replaceAll(RegExp(r'[^\d.,]'), '');
-  if (t.isEmpty) return null;
+  if (t.isEmpty || t.replaceAll(RegExp(r'[.,]'), '').length > 12) return null;
   final last = t.lastIndexOf(RegExp(r'[.,]'));
   final decimals = last < 0 ? '' : t.substring(last + 1);
   if (last >= 0 && decimals.length <= 2) {
@@ -95,6 +95,9 @@ class S {
   String get navHome => _t('Início', 'Home');
   String get navMovements => _t('Movimentos', 'Transactions');
   String get navForecast => _t('Previsão', 'Forecast');
+  String get navCategories => _t('Categorias', 'Categories');
+  String get navSavings => _t('Poupança', 'Savings');
+  String get navPlan => _t('Plano', 'Plan');
   String get navBills => _t('Fixas', 'Bills');
   String get newExpense => _t('Nova despesa', 'New expense');
   String get settings => _t('Ajustes', 'Settings');
@@ -129,6 +132,101 @@ class S {
   String get upcoming => _t('Próximos pagamentos', 'Upcoming payments');
   String get seeAll => _t('Ver todos', 'See all');
   String get nothingToPay => _t('Nada por pagar a partir de hoje.', 'Nothing left to pay from today.');
+
+  String get safeToSpend => _t('Livre para gastar', 'Safe to spend');
+  String safePerDay(String amount, int days) => lang == 'pt'
+      ? '≈ $amount por dia · $days ${days == 1 ? 'dia' : 'dias'} até ao fim do ciclo'
+      : '≈ $amount per day · $days ${days == 1 ? 'day' : 'days'} until the cycle ends';
+  String get safeHint => _t('Em conta + receitas previstas − pagamentos por fazer',
+      'In account + planned income − payments still to make');
+  String budgetNear(String category, int pct) => _t('$category: $pct% do orçamento', '$category: $pct% of budget');
+  String budgetOver(String category, String amount) =>
+      _t('$category: excedeu o orçamento em $amount', '$category: over budget by $amount');
+
+  // ---- categories ----
+  String get spendingByCategory => _t('Gastos por categoria', 'Spending by category');
+  String get spent => _t('Gasto', 'Spent');
+  String get noSpending => _t('Ainda sem despesas neste ciclo.', 'No spending in this cycle yet.');
+  String get noBudget => _t('Sem orçamento', 'No budget');
+  String budgetUsed(String spent, String limit) => _t('$spent de $limit', '$spent of $limit');
+  String budgetLeft(String amount) => _t('Faltam $amount', '$amount left');
+  String budgetFor(String category) => _t('Orçamento: $category', 'Budget: $category');
+  String get budgetHint =>
+      _t('Deixa vazio para remover o orçamento.', 'Leave empty to remove the budget.');
+  String get remove => _t('Remover', 'Remove');
+  String overBy(String a) => _t('Excedido em $a', 'Over by $a');
+  String get budgetsTitle => _t('Orçamento do ciclo', 'Cycle budget');
+  String get setBudget => _t('Definir orçamento', 'Set a budget');
+  String get budgetPerCycle => _t('Limite por ciclo', 'Limit per cycle');
+  String get budgetThisCycle => _t('Gasto neste ciclo', 'Spent this cycle');
+  String get budgetPrevCycle => _t('Gasto no ciclo anterior', 'Spent last cycle');
+  String budgetAverage(String a) => _t('Média: $a', 'Average: $a');
+  String budgetPrevChip(String a) => _t('Ciclo anterior: $a', 'Last cycle: $a');
+  String get suggestTitle => _t('Quanto devias gastar?', 'How much should you spend?');
+  String get suggestBody => _t('Posso definir um orçamento por categoria a partir do que já gastaste. Podes ajustar cada um depois.',
+      'I can set a budget per category from what you already spent. You can adjust each one afterwards.');
+  String suggestAction(int n) => _t('Definir $n orçamentos', 'Set $n budgets');
+  String suggestDone(int n) => _t('$n orçamentos definidos', '$n budgets set');
+  String get budgetSet => _t('Orçamento guardado', 'Budget saved');
+
+  // ---- savings ----
+  String get netWorth => _t('Património', 'Net worth');
+  String netWorthEnd(String a) => _t('Previsto no fim do plano: $a', 'Projected at the end of the plan: $a');
+  String savedRate(int n) => _t('Poupaste em média $n% do rendimento nos últimos ciclos.',
+      'You saved on average $n% of income in recent cycles.');
+  String get goalsTitle => _t('Metas', 'Goals');
+  String get newGoal => _t('Nova meta', 'New goal');
+  String get goalName => _t('Nome da meta', 'Goal name');
+  String get goalTarget => _t('Valor a atingir', 'Amount to reach');
+  String get goalPerCycle => _t('Guardar por ciclo', 'Save per cycle');
+  String get goalPerCycleHint => _t(
+      'Cria uma transferência automática no dia do ordenado. Marca-a como paga quando a fizeres.',
+      'Creates an automatic transfer on payday. Mark it paid when you make it.');
+  String get goalHave => _t('Já tenho', 'Already saved');
+  String get goalAccount => _t('Conta', 'Account');
+  String get goalNewAccount => _t('Nova conta de poupança', 'New savings account');
+  String get goalDone => _t('Meta atingida', 'Goal reached');
+  String get goalNoPlan => _t('Define quanto guardas por ciclo para ver quando chegas lá.',
+      'Set how much you save per cycle to see when you get there.');
+  String goalPerCycleLine(String a) => _t('$a por ciclo', '$a per cycle');
+  String goalEta(String when) => _t('Por volta de $when', 'Around $when');
+  String get goalEmpty => _t('Ainda sem metas. Escolhe uma ideia ou cria a tua.', 'No goals yet. Pick an idea or create your own.');
+  List<String> get goalIdeas => lang == 'pt' ? ['Fundo de emergência', 'Férias', 'Computador'] : ['Emergency fund', 'Holiday', 'Laptop'];
+  String get goalNameRequired => _t('Dá um nome à meta.', 'Give the goal a name.');
+  String get goalTargetRequired => _t('Indica o valor a atingir.', 'Enter the amount to reach.');
+  String get deleteGoalQ => _t('Apagar esta meta? A conta de poupança fica.', 'Delete this goal? The savings account stays.');
+
+  // ---- everyday ----
+  String get thisWeek => _t('Esta semana', 'This week');
+  String vsLastWeek(int pct) =>
+      _t('${pct > 0 ? '▲' : '▼'} ${pct.abs()}% vs semana passada', '${pct > 0 ? '▲' : '▼'} ${pct.abs()}% vs last week');
+  String dueNextWeek(int n, String total) =>
+      _t('$n ${n == 1 ? 'conta' : 'contas'} a pagar nos próximos 7 dias · $total', '$n ${n == 1 ? 'bill' : 'bills'} due in the next 7 days · $total');
+  String get subscriptions => _t('Subscrições', 'Subscriptions');
+  String perMonthYear(String m, String y) => _t('$m por mês · $y por ano', '$m a month · $y a year');
+  String perYear(String y) => _t('$y por ano', '$y a year');
+  String get searchHint => _t('Pesquisar em todos os ciclos', 'Search every cycle');
+  String get noMatches => _t('Nada encontrado.', 'Nothing found.');
+
+  // ---- statement import ----
+  String get importStatement => _t('Importar extrato (CSV)', 'Import bank statement (CSV)');
+  String get importStatementSub => _t('Lê o ficheiro do teu banco, classifica os movimentos e marca as contas pagas',
+      'Reads your bank file, sorts the transactions and marks bills as paid');
+  String get importHow => _t(
+      'Descarrega o extrato do teu banco em CSV e escolhe o ficheiro, ou cola o texto. Vês tudo antes de guardar.',
+      'Download your bank statement as CSV and choose the file, or paste its text. You see everything before it is saved.');
+  String get importPick => _t('Escolher ficheiro', 'Choose file');
+  String get importPaste => _t('Colar', 'Paste');
+  String get importAnalyse => _t('Analisar texto', 'Analyse text');
+  String get importHint => _t('Data;Descrição;Montante;Saldo …', 'Date;Description;Amount;Balance …');
+  String get importUnknown => _t('Não reconheci este formato. Precisa de colunas com a data, a descrição e o montante.',
+      'I did not recognise this format. It needs columns for the date, the description and the amount.');
+  String importSummary(int add, int paid, int dup) => _t('$add novos · $paid contas marcadas como pagas · $dup já registados',
+      '$add new · $paid bills marked paid · $dup already recorded');
+  String importRows(int n) => _t('Importar $n movimentos', 'Import $n transactions');
+  String importDone(int n) => _t('$n movimentos importados', '$n transactions imported');
+  String importMarksPaid(String name) => _t('Marca «$name» como pago', 'Marks "$name" as paid');
+  String get importDuplicate => _t('Já registado', 'Already recorded');
 
   // ---- movements ----
   String movementCount(int n) => lang == 'pt'
@@ -292,6 +390,20 @@ class S {
         ('Subscrição', 'Streaming', false),
       ];
 
+  // ---- categories ----
+  String get categoriesTitle => _t('Categorias', 'Categories');
+  String get categoriesHint => _t('Para onde vai o dinheiro. Acrescenta as tuas ou apaga as que não usas.',
+      'Where the money goes. Add your own or delete the ones you do not use.');
+  String get newCategory => _t('Nova categoria', 'New category');
+  String get categoryName => _t('Nome', 'Name');
+  String get categoryExists => _t('Já existe uma categoria com este nome', 'A category with this name already exists');
+  String get categorySaved => _t('Categoria adicionada', 'Category added');
+  String get categoryDeleted => _t('Categoria apagada', 'Category deleted');
+  String deleteCategoryQ(String name, int uses, String heir) => uses == 0
+      ? _t('Apagar a categoria "$name"?', 'Delete the category "$name"?')
+      : _t('Apagar "$name"? Os $uses movimentos e contas fixas passam para "$heir".',
+          'Delete "$name"? Its $uses transactions and bills move to "$heir".');
+
   // ---- onboarding ----
   String get welcome => _t('Bem-vindo', 'Welcome');
   String get onboardingTitle => _t('Vamos preparar o teu painel', "Let's set up your panel");
@@ -331,7 +443,18 @@ class S {
   String get startDay => _t('Dia de início do ciclo', 'Cycle start day');
   String startDaySub(int d) => _t('Os ciclos começam no dia $d', 'Cycles start on day $d');
   String get exportData => _t('Exportar dados', 'Export data');
-  String get exportSub => _t('Copia uma cópia (JSON) para a área de transferência', 'Copies a backup (JSON) to the clipboard');
+  String get exportSub => _t('Guarda um ficheiro (JSON) com tudo; onde não for possível, copia para a área de transferência',
+      'Saves a file (JSON) with everything; where that is not possible, copies it to the clipboard');
+  String get exportedFile => _t('Ficheiro guardado', 'File saved');
+  String get exportCsv => _t('Exportar movimentos (CSV)', 'Export transactions (CSV)');
+  String get exportCsvSub =>
+      _t('Para folha de cálculo; não serve para restaurar', 'For spreadsheets; it cannot restore the app');
+  String lastBackup(String? d) => d == null ? _t('Ainda sem cópia guardada', 'No backup saved yet') : _t('Última cópia: $d', 'Last backup: $d');
+  String get backupDue => _t('Sem cópia de segurança há mais de 30 dias. Guarda uma agora.',
+      'No backup for over 30 days. Save one now.');
+  String get unreadableTitle => _t('Dados que não consegui ler', 'Data I could not read');
+  String get unreadableSub => _t('Copia para a área de transferência os dados guardados que não carregaram (talvez de outra versão)',
+      'Copies the saved data that failed to load (maybe from another version) to the clipboard');
   String get exported => _t('Cópia copiada', 'Backup copied');
   String get importData => _t('Importar dados', 'Import data');
   String get importSub => _t('Cola uma cópia exportada antes (também do painel web)', 'Paste a backup exported before');
@@ -406,8 +529,15 @@ class S {
   String get recoveryKey => _t('Chave de recuperação', 'Recovery key');
   String get saveAndSignIn => _t('Guardar e entrar', 'Save and sign in');
   String get syncConflict => _t(
-      'Os dados foram alterados noutro dispositivo. A tua última alteração aqui não foi guardada.',
-      'Your data was changed on another device. Your last change here was not saved.');
+      'Os dados foram alterados noutro dispositivo. As alterações dos dois foram juntadas.',
+      'Your data was changed on another device. The changes from both were merged.');
+  String get unsyncedQ => _t(
+      'Há alterações neste dispositivo que ainda não foram sincronizadas. Se saíres agora, perdem-se.',
+      'Some changes on this device are not synced yet. If you sign out now they will be lost.');
+  String get signOutAnyway => _t('Sair mesmo assim', 'Sign out anyway');
+  String get sharedDevice => _t('Dispositivo partilhado', 'Shared device');
+  String get sharedDeviceHint => _t('Não guardar os dados nem a chave aqui; pedir a palavra-passe sempre.',
+      'Keep no data or key here; ask for the password every time.');
 
   String error(BackendError e) => switch (e.code) {
         ErrorCode.invalidCredentials => _t('Email ou palavra-passe errados.', 'Wrong email or password.'),
@@ -428,7 +558,9 @@ class S {
           _t('A ligação expirou. Pede outro email de recuperação.', 'The link has expired. Ask for another recovery email.'),
         ErrorCode.wrongRecoveryKey => _t('Chave de recuperação errada.', 'Wrong recovery key.'),
         ErrorCode.invalidRecoveryKey => _t('Chave de recuperação inválida.', 'Invalid recovery key.'),
-        ErrorCode.shortPassword => atLeastChars(e.min ?? 10),
+        ErrorCode.shortPassword => atLeastChars(e.min ?? 12),
+        ErrorCode.weakPassword => _t('Palavra-passe demasiado comum. Usa uma frase com várias palavras.',
+            'Password too common. Use a phrase of several words.'),
         ErrorCode.other => e.detail ?? somethingWrong,
       };
 }

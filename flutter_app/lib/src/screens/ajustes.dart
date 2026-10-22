@@ -4,9 +4,11 @@ import 'package:flutter/services.dart';
 import '../account.dart';
 import '../app_controller.dart';
 import '../backend.dart';
+import '../download.dart';
 import '../layout.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'importar.dart';
 import 'preferences.dart';
 
 Future<void> openAjustes(BuildContext context) =>
@@ -57,8 +59,11 @@ class AjustesScreen extends StatelessWidget {
             SyncState.offline => s.offline,
           }, onTap: account.pull),
           row(s.signOut, s.signOutSub, onTap: () async {
-            toRoot();
-            await account.signOut();
+            if (!await account.signOut()) {
+              if (!context.mounted || !await confirm(context, s.unsyncedQ, s.signOutAnyway)) return;
+              await account.signOut(force: true);
+            }
+            if (context.mounted) toRoot();
           }),
           row(s.deleteAccount, s.deleteAccountSub, color: Palette.neg, onTap: () async {
             if (!await confirm(context, s.deleteAccountQ, s.delete)) return;
@@ -84,10 +89,25 @@ class AjustesScreen extends StatelessWidget {
         PrefRow(label: s.holidays, hint: s.holidaysHint, child: const HolidaysPicker()),
         section(s.data),
         Container(height: 1, color: Palette.line),
-        row(s.exportData, s.exportSub, onTap: () async {
-          await Clipboard.setData(ClipboardData(text: app.store.exportJSON()));
-          if (context.mounted) toast(context, s.exported);
+        row(s.exportData, '${s.exportSub}\n${s.lastBackup(app.store.state.config.lastBackup)}', onTap: () async {
+          final text = app.store.exportJSON();
+          final saved = saveTextFile('painel-${app.today}.json', text, 'application/json');
+          if (!saved) await Clipboard.setData(ClipboardData(text: text));
+          app.store.markBackedUp(app.today);
+          if (context.mounted) toast(context, saved ? s.exportedFile : s.exported);
         }),
+        row(s.exportCsv, s.exportCsvSub, onTap: () async {
+          final text = app.store.exportCSV();
+          final saved = saveTextFile('painel-${app.today}.csv', text, 'text/csv');
+          if (!saved) await Clipboard.setData(ClipboardData(text: text));
+          if (context.mounted) toast(context, saved ? s.exportedFile : s.exported);
+        }),
+        if (app.store.unreadableCopy != null)
+          row(s.unreadableTitle, s.unreadableSub, onTap: () async {
+            await Clipboard.setData(ClipboardData(text: app.store.unreadableCopy!));
+            if (context.mounted) toast(context, s.exported);
+          }),
+        row(s.importStatement, s.importStatementSub, onTap: () => openImport(context)),
         row(s.importData, s.importSub, onTap: () => _import(context, app)),
         row(s.resetData, s.resetSub, color: Palette.neg, onTap: () async {
           if (await confirm(context, s.resetQ, s.resetAction)) {

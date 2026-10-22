@@ -9,7 +9,10 @@ import '../theme.dart';
 import '../widgets.dart';
 
 class PrevisaoScreen extends StatelessWidget {
-  const PrevisaoScreen({super.key});
+  const PrevisaoScreen({super.key, this.header});
+
+  /// Shown above the title (the Plano tab's switcher).
+  final Widget? header;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +40,7 @@ class PrevisaoScreen extends StatelessWidget {
       maxWidth: 900,
       bottom: 32,
       children: [
+        if (header != null) header!,
         TopRow(children: [H1(s.navForecast)]),
         const SizedBox(height: 6),
         Text(

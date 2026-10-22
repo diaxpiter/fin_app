@@ -1,4 +1,4 @@
-// Dark theme with one lime accent — same tokens as ../styles.css.
+// Dark theme with one lime accent.
 
 import 'package:flutter/material.dart';
 

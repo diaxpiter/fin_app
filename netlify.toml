@@ -1,0 +1,5 @@
+# Netlify build settings. Netlify has no Flutter, so the build installs the same version CI uses (see pages.yml).
+[build]
+  base = "flutter_app"
+  command = "git clone --depth 1 -b 3.47.7 https://github.com/flutter/flutter.git \"$HOME/flutter\" && \"$HOME/flutter/bin/flutter\" build web --release"
+  publish = "build/web"

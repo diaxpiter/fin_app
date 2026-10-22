@@ -1,5 +1,5 @@
-// First login of a new account: language, currency, when the month starts,
-// and the fixed bills. Everything here can be changed later in Ajustes / Fixas.
+// First run of a new account or an empty device: language, currency, when the month starts,
+// accounts, categories and the fixed bills. Everything here can be changed later in Ajustes / Fixas.
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'auth.dart';
 import 'bills.dart';
+import 'categorias.dart';
 import 'preferences.dart';
 
 class OnboardingScreen extends StatelessWidget {
@@ -40,6 +41,12 @@ class OnboardingScreen extends StatelessWidget {
       const SizedBox(height: 4),
       Text(s.balanceHint, style: const TextStyle(fontSize: 12, height: 1.4, color: Palette.muted)),
       const AccountsList(),
+      const SizedBox(height: 20),
+      Lbl(s.categoriesTitle),
+      const SizedBox(height: 4),
+      Text(s.categoriesHint, style: const TextStyle(fontSize: 12, height: 1.4, color: Palette.muted)),
+      const SizedBox(height: 10),
+      const CategoryManager(),
       const SizedBox(height: 20),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Lbl(s.billsTitle),

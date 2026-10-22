@@ -21,7 +21,7 @@ class VaultRow {
 
 enum ErrorCode {
   invalidCredentials, emailNotConfirmed, emailExists, rateLimited, invalidEmail, offline, server,
-  unavailable, unlockFailed, linkExpired, wrongRecoveryKey, invalidRecoveryKey, shortPassword, other,
+  unavailable, unlockFailed, linkExpired, wrongRecoveryKey, invalidRecoveryKey, shortPassword, weakPassword, other,
 }
 
 /// A failure to show the user; the text comes from S.error (i18n.dart).

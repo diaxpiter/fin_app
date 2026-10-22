@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../account.dart';
 import '../app_controller.dart';
 import '../layout.dart';
 import '../logic.dart';
@@ -32,7 +33,56 @@ class HomeScreen extends StatelessWidget {
         .take(wide ? 8 : 3)
         .toList();
 
+    final containsToday = c.start.compareTo(m.today) <= 0 && c.end.compareTo(m.today) >= 0;
+    // Nothing planned yet in today's cycle: the app shows the next one, and the same sum holds for it.
+    final todayEmpty = m.cycles.every((x) => x.start.compareTo(m.today) > 0 || x.end.compareTo(m.today) < 0 || x.items.isEmpty);
+    final nextId = m.cycles.where((x) => x.start.compareTo(m.today) > 0).firstOrNull?.id;
+    final current = containsToday || (todayEmpty && c.id == nextId);
+    final safe = safeToSpend(m.state, c);
+    final days = daysLeftIn(c.end, containsToday ? m.today : c.start);
+    final warnings = <(String, bool)>[];
+    if (current) {
+      final spentBy = {for (final e in spendByCategory(m.state, c)) e.key: e.value};
+      for (final cat in m.state.categories) {
+        final b = cat.budget, sp = spentBy[cat.name] ?? 0;
+        if (b == null || b == 0) continue;
+        if (sp > b) {
+          warnings.add((s.budgetOver(s.category(cat.name), app.money.amount(sp - b)), true));
+        } else if (sp * 100 >= b * 80) {
+          warnings.add((s.budgetNear(s.category(cat.name), (sp * 100 / b).round()), false));
+        }
+      }
+    }
+
+    // the data lives only on this device: nag gently when there is no recent file backup
+    final lastBackup = m.state.config.lastBackup;
+    final backupDue = AccountScope.of(context).status == AccountStatus.guest &&
+        m.state.movements.isNotEmpty &&
+        (lastBackup == null || DateTime.parse(m.today).difference(DateTime.parse(lastBackup)).inDays > 30);
+
     final summary = <Widget>[
+      if (backupDue)
+        InkWell(
+          onTap: () => openAjustes(context),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text('⚠ ${s.backupDue}', style: const TextStyle(fontSize: 13, color: Palette.warn)),
+          ),
+        ),
+      if (current) ...[
+        const SizedBox(height: 28),
+        Lbl(s.safeToSpend),
+        const SizedBox(height: 14),
+        BigAmount(safe, size: wide ? 80 : 68, color: safe < 0 ? Palette.neg : Palette.accent),
+        const SizedBox(height: 12),
+        Text(safe > 0 ? s.safePerDay(app.money.amount(safe ~/ days), days) : s.safeHint,
+            style: const TextStyle(fontSize: 14, color: Palette.muted, height: 1.4)),
+        for (final (text, over) in warnings)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('⚠ $text', style: TextStyle(fontSize: 13, color: over ? Palette.neg : Palette.warn)),
+          ),
+      ],
       const SizedBox(height: 28),
       Lbl(s.leftThisCycle),
       const SizedBox(height: 14),
@@ -106,6 +156,7 @@ class HomeScreen extends StatelessWidget {
             SizedBox(width: 90, child: Text(app.money.amount(x.cents), style: mono(), textAlign: TextAlign.right)),
           ],
         ),
+      _WeekCard(weekSummary(m.state, m.today)),
     ];
 
     return ScreenList(
@@ -172,6 +223,61 @@ class _StatGrid extends StatelessWidget {
                 ),
               ),
           ]),
+      ]),
+    );
+  }
+}
+
+/// The last seven days of spending against the seven before, and the bills due next week.
+class _WeekCard extends StatelessWidget {
+  const _WeekCard(this.week);
+  final WeekSummary week;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final s = app.s;
+    if (week.spent == 0 && week.previous == 0 && week.dueCount == 0) return const SizedBox.shrink();
+    final delta = week.previous > 0 ? ((week.spent - week.previous) / week.previous * 100).round() : null;
+    final tallest = math.max(1, week.days.reduce(math.max));
+    return Container(
+      margin: const EdgeInsets.only(top: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Palette.surface, borderRadius: BorderRadius.circular(12)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Lbl(s.thisWeek),
+        const SizedBox(height: 10),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(app.money.amount(week.spent), style: mono(size: 22, weight: FontWeight.w500)),
+          if (delta != null && delta != 0) ...[
+            const SizedBox(width: 10),
+            Text(s.vsLastWeek(delta), style: TextStyle(fontSize: 12, color: delta > 0 ? Palette.neg : Palette.accent)),
+          ],
+        ]),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 44,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            for (var i = 0; i < week.days.length; i++)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Container(
+                    height: math.max(3, 44 * week.days[i] / tallest),
+                    decoration: BoxDecoration(
+                      color: i == week.days.length - 1 ? Palette.accent : Palette.accent.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+        if (week.dueCount > 0) ...[
+          const SizedBox(height: 14),
+          Text(s.dueNextWeek(week.dueCount, app.money.amount(week.dueTotal)),
+              style: const TextStyle(fontSize: 13, color: Palette.muted)),
+        ],
       ]),
     );
   }

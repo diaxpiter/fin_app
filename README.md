@@ -1,42 +1,40 @@
 # Painel Financeiro (fin_app)
 
-A personal finance web app for iPhone. It installs from Safari to the Home Screen (no App Store), works offline, and keeps your data on the phone.
+A personal finance app built with Flutter. It runs on Android, iOS, web and desktop, installs to the iPhone Home Screen from Safari (no App Store), and works offline.
 
-It is built from the "Financial - Davi" Google Sheet: money is organised in **cycles that start on the 23rd** (23 Oct – 22 Nov is the "Nov" cycle), with recurring bills, a forecast, and quick expense entry.
-
-A Flutter version of the same app is in [`flutter_app/`](flutter_app/README.md). It runs natively on Android, iOS, web and desktop, and its layout adapts from small phones to wide desktop windows.
+It started from the "Financial - Davi" Google Sheet: money is organised in **cycles that start on a day you choose** (23 Oct – 22 Nov is the "Nov" cycle), with fixed bills, several accounts, a forecast and quick expense entry. Details of the app itself are in [`flutter_app/`](flutter_app/README.md).
 
 ## Screens
 
 | Screen | What it does |
 | --- | --- |
-| Início | Balance left over in the cycle, paid vs. still to pay, cash in account, lowest balance, next payments |
-| Movimentos | Every movement of the cycle, grouped by day. Tap one to mark it paid/planned or delete it |
-| Nova despesa | Keypad, category, date, Pago/Previsto. The + button on Início and Movimentos opens it |
-| Previsão | Balance per cycle and accumulated balance for the whole plan |
-| Fixas | Recurring bills (read-only for now) |
-| Ajustes | Export / import a backup, reset to the example data |
+| Início | **Safe to spend** until the cycle ends, balance left in the cycle, paid vs. still to pay, cash per account, next payments, this week against last week, budget warnings |
+| Movimentos | Every movement of the cycle, grouped by day. Search across all cycles. Tap one to mark it paid/planned, edit or delete it. Import a bank statement (CSV) |
+| Categorias | Where the cycle's money went, per category, against the previous cycle. Budgets per category, with a suggested amount from your own history and one tap to set them all. Add your own categories or delete the ones you do not use (what used a deleted one moves to "Outros") |
+| Poupança | Net worth now and over the plan, and savings goals. Each goal has a savings account and an automatic transfer on payday ("pay yourself first") |
+| Plano | The forecast (balance per cycle) and the fixed bills, with a summary of subscriptions per month and per year |
+| Ajustes | Accounts, language, currency, backup (file or clipboard), CSV export, statement import |
+
+**First run.** A new account, or an empty device used as a guest, starts with a short setup: language, currency, the day the month starts, your accounts (checking, spending, savings or investment, each with its starting balance), your categories and your fixed bills. Everything can be changed later.
+
+New expense: the expenses you repeat appear as chips, one tap fills amount, category and description.
+
+**Statement import.** Choose your bank's CSV (or paste its text). The app finds the date, description and amount columns, files each row under the category you used for the same shop before, ticks off planned bills that the statement shows as paid, and skips rows already recorded. You review everything before it is saved.
 
 ## Run it
 
-No build step, no dependencies. Any static server works:
-
 ```sh
-python3 -m http.server 8000
-# open http://localhost:8000
+cd flutter_app
+flutter pub get
+flutter run -d chrome          # or any other device
+flutter analyze && flutter test
 ```
 
-Tests (Node 20+):
-
-```sh
-node --test test/logic.test.mjs
-```
-
-The tests check the cycle maths against the numbers in the Google Sheet (cycle totals, savings rate, accumulated balance through Jun 2027).
+The tests check the cycle maths against the numbers in the Google Sheet, the encrypted sync (two devices, offline, conflicts), and every screen at phone, tablet and desktop sizes.
 
 ## Put it on your iPhone
 
-The site is the Flutter app, built and deployed by [`.github/workflows/pages.yml`](.github/workflows/pages.yml) on every push to `main` (tests run first; a failing test blocks the deploy).
+The site is built and deployed by [`.github/workflows/pages.yml`](.github/workflows/pages.yml) on every push to `main` (analysis and tests run first; a failure blocks the deploy).
 
 1. One time: repo **Settings → Pages → Source: GitHub Actions**.
 2. Push to `main`, wait for the "Deploy to GitHub Pages" run (Actions tab, ~3 min).
@@ -45,24 +43,20 @@ The site is the Flutter app, built and deployed by [`.github/workflows/pages.yml
 
 It must be opened from the Home Screen icon to run full-screen like an app.
 
-## How it is organised
+## Your data
 
-```
-index.html            app shell + PWA meta tags
-styles.css            all styling (dark theme, one lime accent)
-src/logic.js          pure finance logic (cycles, recurring bills, totals) — tested
-src/seed.js           starting data copied from the sheet
-src/store.js          persistence (localStorage). Swap this file to change the backend
-src/main.js           screens, routing, events
-sw.js                 offline cache
-manifest.webmanifest  install info and icons
-```
+- Without an account, data lives only in the browser or phone. **Ajustes → Exportar dados** saves a file; the app reminds you when the last one is over 30 days old.
+- With an account, data is encrypted on the device before it is uploaded ([`crypto.dart`](flutter_app/lib/src/crypto.dart)). The server sees only ciphertext. Changes made on two devices are merged, and changes that could not be uploaded are kept until they can be.
+- Tick **Dispositivo partilhado** when signing in on a computer that is not yours: nothing is kept on it, and signing in is needed after every reload.
+- Money is stored as integer cents. Dates are plain `YYYY-MM-DD` strings. A cycle id is the month the cycle ends in (`2026-11` = 23 Oct – 22 Nov). Anything read from a backup or the server is validated first.
 
-Money is stored as integer cents. Dates are plain `YYYY-MM-DD` strings (no time-zone surprises). A cycle id is the month the cycle ends in (`2026-11` = 23 Oct – 22 Nov).
+## Setting up the server (Supabase)
 
-## Known limits and next steps
+1. Run [`supabase/schema.sql`](supabase/schema.sql) once in the SQL editor. Run it again after pulling updates: it is safe to repeat, and newer versions add a table that keeps the last 10 versions of each vault.
+2. In the Supabase dashboard, under Authentication, turn on **email confirmation** and **CAPTCHA protection**, and keep the default rate limits.
 
-- Data lives in the phone's browser storage only. Use **Ajustes → Exportar dados** now and then. A real backend (sync between devices, or reading the Google Sheet) is the next big decision.
-- Recurring bills can't be edited in the app yet, and changing one doesn't regenerate future movements.
-- Editing a movement's amount or description isn't built; delete and re-add for now.
-- The start day (23) and opening balance are fixed in `src/seed.js` until there is a settings form.
+## Security notes
+
+- The page sets a Content-Security-Policy in [`web/index.html`](flutter_app/web/index.html). GitHub Pages cannot send response headers, so protection against embedding in another site (`frame-ancestors` / `X-Frame-Options`) needs a host that can, such as Cloudflare or Netlify in front of the site.
+- The data key is kept in the browser's storage unless **Dispositivo partilhado** is ticked. Anything that can run script on the page could read it, which is why the policy is strict and the page loads no third-party code.
+- Not done yet: secure storage of the key on iOS and Android, and Argon2id instead of PBKDF2 for the password.

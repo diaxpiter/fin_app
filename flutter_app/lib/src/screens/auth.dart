@@ -140,6 +140,7 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   _Mode _mode = _Mode.signIn;
   final _email = TextEditingController(), _pass = TextEditingController(), _pass2 = TextEditingController();
+  bool _shared = false;
   bool _busy = false;
   String? _error, _info;
 
@@ -171,6 +172,7 @@ class _AuthScreenState extends State<AuthScreen> {
     }
     if (_mode != _Mode.forgot && _pass.text.isEmpty) return setState(() => _error = s.enterPassword);
     setState(() => _busy = true);
+    account.rememberDevice = !_shared;
     try {
       switch (_mode) {
         case _Mode.signIn:
@@ -236,6 +238,15 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       _message(_error),
       _message(_info, error: false),
+      if (_mode != _Mode.forgot)
+        CheckboxListTile(
+          value: _shared,
+          onChanged: _busy ? null : (v) => setState(() => _shared = v ?? false),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(s.sharedDevice, style: const TextStyle(fontSize: 14)),
+          subtitle: Text(s.sharedDeviceHint, style: const TextStyle(fontSize: 12, color: Palette.muted)),
+        ),
       _Primary(label: action, busy: _busy, onPressed: _submit),
       if (_busy && _mode != _Mode.forgot)
         Padding(

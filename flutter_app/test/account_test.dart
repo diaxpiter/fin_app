@@ -165,7 +165,7 @@ void main() {
       expect(c.status, AccountStatus.unlocked);
     });
 
-    test('conflict: the other device wins and the user is told', () async {
+    test('conflict: changes from both devices are kept and the user is told', () async {
       final server = FakeServer();
       final a = await signedUp(server);
       await a.finishSetup(keepDeviceData: false);
@@ -176,9 +176,106 @@ void main() {
       await a.push();
       storeB.addMovement(date: '2026-11-02', description: 'B', category: 'Outros', cents: 1, estado: 'Pago');
       await b.push();
+      await Future<void>.delayed(const Duration(milliseconds: 50)); // the merged copy is uploaded right after
 
-      expect(storeB.state.movements.single.description, 'A');
+      expect(storeB.state.movements.map((m) => m.description), unorderedEquals(['A', 'B']));
       expect(b.takeNotice(), isNotNull);
+      await a.pull();
+      expect(a.store.state.movements.map((m) => m.description), unorderedEquals(['A', 'B']));
+    });
+
+    test('an edit made while an upload is in flight is not lost', () async {
+      final server = FakeServer();
+      final a = await signedUp(server);
+      await a.finishSetup(keepDeviceData: false);
+      final backend = a.backend! as FakeBackend;
+      backend.beforeUpdate = () async {
+        backend.beforeUpdate = null;
+        a.store.addMovement(date: '2026-11-03', description: 'late', category: 'Outros', cents: 1, estado: 'Pago');
+      };
+      a.store.addMovement(date: '2026-11-02', description: 'first', category: 'Outros', cents: 1, estado: 'Pago');
+      await a.push();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final (b, _, storeB) = await device(server);
+      await b.signIn(email, password);
+      expect(storeB.state.movements.map((m) => m.description), unorderedEquals(['first', 'late']));
+    });
+
+    test('sign out refuses to discard unsynced changes unless forced', () async {
+      final server = FakeServer();
+      final a = await signedUp(server);
+      await a.finishSetup(keepDeviceData: false);
+      (a.backend! as FakeBackend).offline = true;
+      a.store.addMovement(date: '2026-11-02', description: 'X', category: 'Outros', cents: 1, estado: 'Pago');
+
+      expect(await a.signOut(), isFalse);
+      expect(a.status, AccountStatus.unlocked);
+      expect(a.store.state.movements, hasLength(1));
+      expect(await a.signOut(force: true), isTrue);
+      expect(a.status, AccountStatus.signedOut);
+      expect(a.store.state.movements, isEmpty);
+    });
+
+    test('unsynced edits survive the server ending the session and return at the next sign-in', () async {
+      final server = FakeServer();
+      final a = await signedUp(server);
+      await a.finishSetup(keepDeviceData: false);
+      final backend = a.backend! as FakeBackend;
+      backend.offline = true;
+      a.store.addMovement(date: '2026-11-02', description: 'kept', category: 'Outros', cents: 1, estado: 'Pago');
+      backend.emit(BackendEvent.signedOut); // session revoked while the change was unsynced
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(a.status, AccountStatus.signedOut);
+      expect(a.store.state.movements, isEmpty);
+
+      backend.offline = false;
+      await a.signIn(email, password);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(a.store.state.movements.map((m) => m.description), ['kept']);
+      expect(server.vaults[email]!.version, greaterThan(1)); // and it reached the server
+    });
+
+    test('an older copy of the vault than the one already held is ignored', () async {
+      final server = FakeServer();
+      final a = await signedUp(server);
+      await a.finishSetup(keepDeviceData: false);
+      a.store.addMovement(date: '2026-11-02', description: 'one', category: 'Outros', cents: 1, estado: 'Pago');
+      await a.push();
+      final old = server.vaults[email]!;
+      a.store.addMovement(date: '2026-11-03', description: 'two', category: 'Outros', cents: 1, estado: 'Pago');
+      await a.push();
+      server.vaults[email] = old; // a server replaying an earlier copy
+
+      a.store.addMovement(date: '2026-11-04', description: 'three', category: 'Outros', cents: 1, estado: 'Pago');
+      await a.push();
+      await Future<void>.delayed(const Duration(milliseconds: 100)); // bounded retries, no endless loop
+      expect(a.store.state.movements.map((m) => m.description), unorderedEquals(['one', 'two', 'three']));
+      expect(server.vaults[email]!.version, old.version);
+    });
+
+    test('obvious passwords are refused', () async {
+      final server = FakeServer();
+      final (a, _, _) = await device(server);
+      await expectLater(a.signUp(email, 'password1234567'), throwsA(isA<BackendError>()));
+      await expectLater(a.signUp(email, 'aaaaaaaaaaaaaa'), throwsA(isA<BackendError>()));
+      await expectLater(a.signUp(email, 'elevenchars'), throwsA(isA<BackendError>()));
+      expect(server.users, isEmpty);
+    });
+
+    test('shared device: no key is kept, so a reload asks for the password again', () async {
+      final server = FakeServer();
+      final (a, backend, _) = await device(server);
+      a.rememberDevice = false;
+      await a.signUp(email, password);
+      await a.finishSetup(keepDeviceData: false);
+      final p = await SharedPreferences.getInstance();
+      expect(p.getString('account_key'), isNull);
+
+      final reloaded = AccountController(store: Store.memory(), backend: backend, prefs: p, iterations: 1000);
+      await reloaded.init();
+      expect(reloaded.status, AccountStatus.signedOut);
+      expect(backend.hasSession, isFalse);
     });
 
     test('offline edits are kept and pushed later', () async {

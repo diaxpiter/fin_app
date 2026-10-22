@@ -32,6 +32,7 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - run: flutter analyze
       - run: flutter test
 
       # The site lives at https://<user>.github.io/<repo>/, so assets need that prefix.

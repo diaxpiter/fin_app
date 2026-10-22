@@ -1,4 +1,4 @@
-// Same checks as ../../test/logic.test.mjs: the cycle maths must match the Google Sheet.
+// The cycle maths must match the Google Sheet.
 
 import 'package:fin_app/src/logic.dart';
 import 'package:fin_app/src/models.dart';
@@ -65,6 +65,40 @@ void main() {
     expect(cashNow(s), 0);
     s.movements.firstWhere((m) => m.description == 'Salário').estado = 'Pago';
     expect(cashNow(s), 113757);
+  });
+
+  test('safe to spend = cash + planned income − planned payments, whatever is already paid', () {
+    final s = seedState();
+    final nov = computeCycles(s, '2026-11-01').firstWhere((c) => c.id == '2026-11');
+    expect(safeToSpend(s, nov), 23906);
+    s.movements.firstWhere((m) => m.description == 'Salário').estado = 'Pago';
+    s.movements.firstWhere((m) => m.description == 'Renda').estado = 'Pago';
+    final again = computeCycles(s, '2026-11-01').firstWhere((c) => c.id == '2026-11');
+    expect(safeToSpend(s, again), 23906);
+  });
+
+  test('days left counts today and the last day', () {
+    expect(daysLeftIn('2026-11-22', '2026-11-22'), 1);
+    expect(daysLeftIn('2026-11-22', '2026-11-12'), 11);
+    expect(daysLeftIn('2026-11-22', '2026-11-30'), 1);
+  });
+
+  test('spending by category adds up to the cycle expenses, biggest first', () {
+    final s = seedState();
+    final nov = computeCycles(s, '2026-11-01').firstWhere((c) => c.id == '2026-11');
+    final by = spendByCategory(s, nov);
+    expect(by.map((e) => e.key), ['Crédito', 'Moradia', 'Subscrição']);
+    expect(by.map((e) => e.value), [44245, 40588, 5018]);
+    expect(by.fold<int>(0, (a, e) => a + e.value), nov.despesas);
+  });
+
+  test('a category budget survives a backup round trip', () {
+    final s = seedState();
+    final i = s.categories.indexWhere((c) => c.name == 'Lazer');
+    s.categories[i] = s.categories[i].withBudget(10000);
+    final back = AppState.fromJson(s.toJson());
+    expect(back.categories.firstWhere((c) => c.name == 'Lazer').budget, 10000);
+    expect(back.categories.firstWhere((c) => c.name == 'Moradia').budget, isNull);
   });
 
   test("today's cycle is listed even before the plan starts", () {

@@ -8,7 +8,10 @@ import '../widgets.dart';
 import 'bills.dart';
 
 class FixasScreen extends StatelessWidget {
-  const FixasScreen({super.key});
+  const FixasScreen({super.key, this.header});
+
+  /// Shown above the title (the Plano tab's switcher).
+  final Widget? header;
 
   @override
   Widget build(BuildContext context) {
@@ -34,10 +37,14 @@ class FixasScreen extends StatelessWidget {
           ]),
         );
 
+    final subs = active.where((r) => r.category == 'Subscrição').toList()..sort((a, b) => b.cents.compareTo(a.cents));
+    final subsMonth = subs.fold(0, (a, r) => a + r.cents);
+
     return ScreenList(
       maxWidth: 760,
       bottom: 32,
       children: [
+        if (header != null) header!,
         TopRow(children: [
           H1(s.billsTitle),
           FilledButton.icon(
@@ -60,6 +67,28 @@ class FixasScreen extends StatelessWidget {
             ]),
           ),
         ),
+        if (subs.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Palette.surface, borderRadius: BorderRadius.circular(12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Lbl(s.subscriptions),
+              const SizedBox(height: 10),
+              Text(s.perMonthYear(app.money.amount(subsMonth), app.money.amount(subsMonth * 12)),
+                  style: mono(size: 15, weight: FontWeight.w500)),
+              const SizedBox(height: 10),
+              for (final r in subs)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(children: [
+                    Expanded(child: Text(r.description, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                    Text(s.perYear(app.money.amount(r.cents * 12)), style: mono(size: 12, color: Palette.muted)),
+                  ]),
+                ),
+            ]),
+          ),
+        ],
         const SizedBox(height: 24),
         if (rec.isEmpty) ...[
           Text(s.noBillsYet, style: const TextStyle(fontSize: 14, height: 1.45, color: Palette.muted)),

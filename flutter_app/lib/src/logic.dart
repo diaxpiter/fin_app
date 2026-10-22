@@ -1,5 +1,5 @@
 // Pure finance logic: cycles, recurring-bill expansion, totals.
-// Port of ../src/logic.js — keep the two in sync. Tested in test/logic_test.dart.
+// Tested in test/logic_test.dart.
 // Money is handled in integer cents to avoid floating-point drift.
 
 import 'holidays.dart';
@@ -376,4 +376,152 @@ int openingBalanceFor(AppState state, String account, int balanceToday) =>
 int cashNow(AppState state, {Iterable<String>? accounts}) {
   final ids = accounts ?? state.accounts.where((a) => !a.isSavings).map((a) => a.id);
   return state.config.openingBalance + ids.fold<int>(0, (sum, id) => sum + accountCash(state, id));
+}
+
+/// What can still be spent before the cycle ends: everyday money now, plus planned
+/// income and minus planned payments (and planned moves out of everyday accounts) in [c].
+int safeToSpend(AppState state, Cycle c) {
+  final types = typesOf(state);
+  final everyday = {for (final a in state.accounts) if (!a.isSavings) a.id};
+  var total = cashNow(state);
+  for (final m in c.items.where((x) => x.estado != 'Pago')) {
+    accountDeltas(m, types, state.defaultAccount).forEach((acc, d) {
+      if (everyday.contains(acc)) total += d;
+    });
+  }
+  return total;
+}
+
+/// Days from [today] to [cycleEnd], both included; at least 1.
+int daysLeftIn(String cycleEnd, String today) {
+  final e = parseISO(cycleEnd), t = parseISO(today);
+  final d = DateTime.utc(e.y, e.m, e.d).difference(DateTime.utc(t.y, t.m, t.d)).inDays + 1;
+  return d < 1 ? 1 : d;
+}
+
+/// Spending per expense category in [c] (income and transfers left out), biggest first.
+List<MapEntry<String, int>> spendByCategory(AppState state, Cycle c) {
+  final types = typesOf(state);
+  final out = <String, int>{};
+  for (final m in c.items) {
+    if (types[m.category] == 'Saída') out[m.category] = (out[m.category] ?? 0) + m.cents;
+  }
+  return out.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+}
+
+/// A budget worth suggesting for [category]: what it cost on average in the (up to) three cycles
+/// before [cycleId] that had any spending, rounded up to 5.00. With no history it uses [cycleId]
+/// itself. Null when there is nothing to base it on.
+int? suggestedBudget(AppState state, List<Cycle> cycles, String cycleId, String category, {int n = 3}) {
+  int spentIn(Cycle c) => spendByCategory(state, c).where((e) => e.key == category).fold(0, (a, e) => a + e.value);
+  final i = cycles.indexWhere((c) => c.id == cycleId);
+  if (i < 0) return null;
+  final past = <int>[];
+  for (var j = i - 1; j >= 0 && past.length < n; j--) {
+    if (cycles[j].items.isNotEmpty) past.add(spentIn(cycles[j]));
+  }
+  final basis = past.isEmpty ? [spentIn(cycles[i])] : past;
+  final avg = basis.fold<int>(0, (a, b) => a + b) ~/ basis.length;
+  return avg <= 0 ? null : (avg + 499) ~/ 500 * 500;
+}
+
+// ---- Savings ----------------------------------------------------------
+
+/// Everything the user owns in every account right now (paid movements only).
+int netWorth(AppState state) => cashNow(state, accounts: state.accounts.map((a) => a.id));
+
+class GoalProgress {
+  const GoalProgress({required this.saved, required this.target, this.cyclesLeft, this.etaCycle});
+  final int saved, target;
+
+  /// Contributions still needed at the current pace; null without a per-cycle amount.
+  final int? cyclesLeft;
+  final String? etaCycle;
+  bool get done => saved >= target;
+}
+
+/// How far along a goal is, and (with a per-cycle amount) roughly when it will be reached.
+GoalProgress goalProgress(AppState state, Goal g, String todayCycle) {
+  final saved = accountCash(state, g.account);
+  final left = g.target - saved;
+  if (left <= 0) return GoalProgress(saved: saved, target: g.target, cyclesLeft: 0);
+  if (g.perCycle <= 0) return GoalProgress(saved: saved, target: g.target);
+  final n = (left + g.perCycle - 1) ~/ g.perCycle;
+  return GoalProgress(saved: saved, target: g.target, cyclesLeft: n, etaCycle: nextCycleId(todayCycle, n));
+}
+
+/// Average savings rate (%) of the last three cycles up to [todayCycle] that had income; null without any.
+int? recentSavingsRate(List<Cycle> cycles, String todayCycle) {
+  final recent = cycles.where((c) => c.id.compareTo(todayCycle) <= 0 && c.receitas > 0).toList();
+  if (recent.isEmpty) return null;
+  final last = recent.reversed.take(3).toList();
+  return (last.fold<int>(0, (a, c) => a + c.savingsRate) / last.length).round();
+}
+
+// ---- Everyday helpers ---------------------------------------------------
+
+String addDays(String date, int n) {
+  final p = parseISO(date);
+  final d = DateTime.utc(p.y, p.m, p.d).add(Duration(days: n));
+  return iso(d.year, d.month, d.day);
+}
+
+class Frequent {
+  const Frequent(this.description, this.category, this.cents);
+  final String description, category;
+  final int cents;
+}
+
+/// The expenses the user pays again and again (paid by hand at least twice in the last [days]),
+/// most repeated first, each with its latest amount: one tap fills the new-expense form.
+List<Frequent> frequentExpenses(AppState state, String today, {int limit = 5, int days = 120}) {
+  final types = typesOf(state);
+  final since = addDays(today, -days);
+  final groups = <String, List<Movement>>{};
+  for (final m in state.movements) {
+    if (m.gen || m.estado != 'Pago' || types[m.category] != 'Saída') continue;
+    if (m.date.compareTo(since) < 0 || m.date.compareTo(today) > 0 || m.description.trim().isEmpty) continue;
+    groups.putIfAbsent('${_norm(m.description)}|${m.category}', () => []).add(m);
+  }
+  final list = groups.values.where((g) => g.length >= 2).toList()
+    ..sort((a, b) {
+      final byCount = b.length.compareTo(a.length);
+      if (byCount != 0) return byCount;
+      return b.map((m) => m.date).reduce((x, y) => x.compareTo(y) >= 0 ? x : y).compareTo(a.map((m) => m.date).reduce((x, y) => x.compareTo(y) >= 0 ? x : y));
+    });
+  return [
+    for (final g in list.take(limit))
+      () {
+        final last = g.reduce((a, b) => a.date.compareTo(b.date) >= 0 ? a : b);
+        return Frequent(last.description, last.category, last.cents);
+      }()
+  ];
+}
+
+class WeekSummary {
+  const WeekSummary(this.days, this.spent, this.previous, this.dueCount, this.dueTotal);
+
+  /// Paid spending per day, the last seven days, oldest first (the last one is today).
+  final List<int> days;
+  final int spent, previous, dueCount, dueTotal;
+}
+
+/// The last seven days against the seven before, and what falls due in the next seven.
+WeekSummary weekSummary(AppState state, String today) {
+  final types = typesOf(state);
+  final paid = <String, int>{};
+  var dueCount = 0, dueTotal = 0;
+  final next = addDays(today, 7);
+  for (final m in state.movements) {
+    if (types[m.category] != 'Saída') continue;
+    if (m.estado == 'Pago') {
+      paid[m.date] = (paid[m.date] ?? 0) + m.cents;
+    } else if (m.date.compareTo(today) > 0 && m.date.compareTo(next) <= 0) {
+      dueCount++;
+      dueTotal += m.cents;
+    }
+  }
+  int on(int back) => paid[addDays(today, -back)] ?? 0;
+  final days = [for (var i = 6; i >= 0; i--) on(i)];
+  return WeekSummary(days, days.fold(0, (a, b) => a + b), [for (var i = 7; i < 14; i++) on(i)].fold(0, (a, b) => a + b), dueCount, dueTotal);
 }

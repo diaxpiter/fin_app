@@ -1,5 +1,5 @@
 // Starting data, copied from the "Financial - Davi" Google Sheet.
-// Port of ../src/seed.js. Used on first launch and by "Repor dados de exemplo".
+// Used by "Repor dados de exemplo" and by tests; a new user starts from [emptyState].
 
 import 'logic.dart';
 import 'models.dart';

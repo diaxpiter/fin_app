@@ -23,7 +23,9 @@ class MoneyInputFormatter extends TextInputFormatter {
 
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) =>
-      (signed ? _signed : _unsigned).hasMatch(newValue.text) ? newValue : oldValue;
+      (signed ? _signed : _unsigned).hasMatch(newValue.text) && RegExp(r'\d').allMatches(newValue.text).length <= 12
+          ? newValue
+          : oldValue;
 }
 
 /// A form field that opens a calendar. Shows [text]; [onClear] adds a clear button.
