@@ -38,7 +38,7 @@ jobs:
       # The site lives at https://<user>.github.io/<repo>/, so assets need that prefix.
       - run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: flutter_app/build/web
