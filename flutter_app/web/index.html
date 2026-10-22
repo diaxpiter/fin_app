@@ -5,9 +5,8 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <!-- Page kept inside the safe area (opaque status bar, no "cover"): Flutter web doesn't pad for the
-       notch or the home indicator, so on an iPhone home-screen app the page slid under them. Touches
-       then landed below where they were drawn (+ opened Fixas, the bottom bar seemed dead). -->
+  <!-- Flutter replaces this tag at start-up; it never asks for "cover", so the page stays out of the
+       notch and home-indicator areas. Keep it that way: Flutter web doesn't pad for them. -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Ciclos, movimentos e previsão das tuas finanças.">
   <meta name="theme-color" content="#0B0B0C">
@@ -15,6 +14,8 @@
   <!-- iOS: installs from Safari → Share → Add to Home Screen -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <!-- Opaque, not translucent: with a translucent status bar the home-screen app is drawn under it
+       while iOS measures the page without it, which misplaces touches near the bottom bar. -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Painel">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -25,6 +26,32 @@
   <style>html, body { margin: 0; background: #0B0B0C; }</style>
 </head>
 <body>
+  <script>
+    // iPhone home-screen app only: after the keyboard closes, iOS can leave the page shrunk or
+    // shifted, so the bottom bar sits above a dead band (flutter/flutter#111896). When that
+    // happens, flipping the app's display makes WebKit measure the screen again.
+    (function () {
+      if (navigator.standalone !== true) return;
+      var tallest = window.innerHeight;
+      window.addEventListener('resize', function () { tallest = Math.max(tallest, window.innerHeight); });
+      window.addEventListener('orientationchange', function () { tallest = 0; });
+      document.addEventListener('focusout', function (e) {
+        var t = e.target;
+        if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) return;
+        setTimeout(function () {
+          var active = document.activeElement;
+          if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return; // still typing
+          if (window.visualViewport && window.visualViewport.offsetTop !== 0) window.scrollTo(0, 0);
+          var view = document.querySelector('flutter-view');
+          if (!view || tallest - window.innerHeight <= 4) return;
+          view.style.display = 'none';
+          void view.offsetHeight; // synchronous reflow
+          view.style.display = '';
+          window.dispatchEvent(new Event('resize')); // let Flutter re-read the size
+        }, 150);
+      }, true);
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
