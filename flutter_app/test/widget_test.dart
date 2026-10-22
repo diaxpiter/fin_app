@@ -9,12 +9,12 @@ import 'package:fin_app/src/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Future<void> pumpAt(WidgetTester tester, Size size, {String? language = 'pt'}) async {
+Future<void> pumpAt(WidgetTester tester, Size size, {String? language = 'pt', DateTime? now}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final store = Store.memory()..setLanguage(language);
-  final app = AppController(store, clock: () => DateTime(2026, 11, 1));
+  final app = AppController(store, clock: () => now ?? DateTime(2026, 11, 1));
   // no backend → guest mode, straight to the app
   final account = AccountController(store: store, backend: null, prefs: null);
   await account.init();
@@ -142,6 +142,9 @@ void editingTests() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Moradia'));
     await tester.enterText(find.byType(TextField), 'Luz');
+    // the keypad steps aside while the description is selected; tap the amount to get it back
+    await tester.tap(find.byKey(const ValueKey('nova-amount')));
+    await tester.pumpAndSettle();
     for (final k in ['5', '2', '3', '0']) {
       await tester.tap(find.text(k).last);
     }

@@ -1,5 +1,7 @@
 // Shared pieces used by several screens.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -62,8 +64,53 @@ Future<String?> pickDate(BuildContext context, String initial) async {
     initialDate: d,
     firstDate: DateTime(d.year - 5),
     lastDate: DateTime(d.year + 10),
+    builder: (context, child) => _FittedDatePicker(child: child!),
   );
   return picked == null ? null : todayISO(picked);
+}
+
+/// The calendar's header ("segunda, 19/10") is a fixed 32px headline. In landscape
+/// windows (desktop browsers, phones on their side) it sits in a 152px column, where
+/// long weekdays broke mid-word; on narrow phones in portrait it was cut with "…".
+/// This shrinks the headline just enough: in portrait the whole date fits on one line,
+/// in landscape each word does (weekday on one line, day/month on the next).
+class _FittedDatePicker extends StatelessWidget {
+  const _FittedDatePicker({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final loc = MaterialLocalizations.of(context);
+    final portrait = MediaQuery.orientationOf(context) == Orientation.portrait;
+    // text width Material leaves for the headline (see date_picker.dart):
+    // portrait dialog ≤ 360 wide with 16px screen margins, minus paddings and the edit button;
+    // landscape header column 152 minus 16px each side
+    final room = portrait ? math.min(MediaQuery.sizeOf(context).width - 32, 360.0) - 24 - 12 - 48 - 4 : 152.0 - 32 - 4;
+    final base = theme.textTheme.headlineLarge ?? const TextStyle(fontSize: 32);
+    final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.4);
+    var widest = 0.0;
+    for (var i = 0; i < 7; i++) {
+      // a week of two-digit days covers every weekday name
+      final text = loc.formatMediumDate(DateTime(2026, 10, 19 + i));
+      for (final part in portrait ? [text] : text.split(' ')) {
+        final painter = TextPainter(text: TextSpan(text: part, style: base), textDirection: TextDirection.ltr, textScaler: scaler)
+          ..layout();
+        widest = math.max(widest, painter.width);
+        painter.dispose();
+      }
+    }
+    final size = (base.fontSize ?? 32) * math.min(1.0, room / widest);
+    return Theme(
+      data: theme.copyWith(
+        datePickerTheme: theme.datePickerTheme.copyWith(
+          headerForegroundColor: Palette.text,
+          headerHeadlineStyle: base.copyWith(fontSize: size.floorToDouble()),
+        ),
+      ),
+      child: child,
+    );
+  }
 }
 
 class Lbl extends StatelessWidget {
@@ -168,13 +215,16 @@ class PillChip extends StatelessWidget {
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onTap,
+          // Center(widthFactor: 1) hugs the label: an aligned Container would fill a whole Wrap row
           child: Container(
             height: 36,
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.center,
-            child: Text(label,
-                style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w500, color: selected ? Palette.bg : Palette.soft)),
+            child: Center(
+              widthFactor: 1,
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w500, color: selected ? Palette.bg : Palette.soft)),
+            ),
           ),
         ),
       );

@@ -14,6 +14,19 @@ import 'preferences.dart';
 
 enum _Kind { expense, income, transfer }
 
+final _numpadDigits = {
+  LogicalKeyboardKey.numpad0: '0',
+  LogicalKeyboardKey.numpad1: '1',
+  LogicalKeyboardKey.numpad2: '2',
+  LogicalKeyboardKey.numpad3: '3',
+  LogicalKeyboardKey.numpad4: '4',
+  LogicalKeyboardKey.numpad5: '5',
+  LogicalKeyboardKey.numpad6: '6',
+  LogicalKeyboardKey.numpad7: '7',
+  LogicalKeyboardKey.numpad8: '8',
+  LogicalKeyboardKey.numpad9: '9',
+};
+
 /// Full-screen page on phones (portrait or landscape), a centred dialog on tablets and desktop.
 /// With [editing], the same form edits an existing movement.
 Future<void> openNova(BuildContext context, {Movement? editing}) {
@@ -78,14 +91,34 @@ class _NovaScreenState extends State<NovaScreen> {
   String? _error;
   late final _desc = TextEditingController(text: widget.editing?.description ?? '');
 
+  // The amount and the description are selected separately. While the amount is
+  // selected the on-screen keypad (and a physical keyboard's digits) type into it;
+  // while the description is, the keypad steps aside for the system keyboard.
+  final _amountFocus = FocusNode(debugLabel: 'amount');
+  final _descFocus = FocusNode(debugLabel: 'description');
+
+  @override
+  void initState() {
+    super.initState();
+    _amountFocus.addListener(_focusChanged);
+    _descFocus.addListener(_focusChanged);
+  }
+
+  void _focusChanged() => setState(() {});
+
   @override
   void dispose() {
     _desc.dispose();
+    _amountFocus.dispose();
+    _descFocus.dispose();
     super.dispose();
   }
 
+  void _selectAmount() => _amountFocus.requestFocus();
+
   void _key(String v) => setState(() {
         _error = null;
+        if (!_amountFocus.hasFocus) _selectAmount();
         if (v == 'back') {
           _cents ~/= 10;
         } else {
@@ -207,12 +240,27 @@ class _NovaScreenState extends State<NovaScreen> {
     if (picked != null) setState(() => _date = picked);
   }
 
-  // Physical keyboard (desktop, web, tablets with keyboards): digits, backspace, enter.
+  // Physical keyboard (desktop, web, tablets with keyboards) while the amount is selected:
+  // digits, backspace, enter. A letter starts the description. Keys typed in the
+  // description never reach here: they belong to the text field.
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
     final ch = e.character;
-    if (ch != null && RegExp(r'^\d$').hasMatch(ch)) {
-      _key(ch);
+    // the number pad's digits don't always come with a character (Num Lock, some browsers)
+    final digit = ch != null && RegExp(r'^\d$').hasMatch(ch) ? ch : _numpadDigits[e.logicalKey];
+    if (digit != null) {
+      _key(digit);
+      return KeyEventResult.handled;
+    }
+    final keys = HardwareKeyboard.instance;
+    if (ch != null &&
+        RegExp(r'^\p{L}$', unicode: true).hasMatch(ch) &&
+        !keys.isControlPressed &&
+        !keys.isMetaPressed &&
+        !keys.isAltPressed) {
+      final text = _desc.text + ch;
+      _desc.value = TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+      _descFocus.requestFocus();
       return KeyEventResult.handled;
     }
     if (e.logicalKey == LogicalKeyboardKey.backspace) {
@@ -247,6 +295,9 @@ class _NovaScreenState extends State<NovaScreen> {
       }
     }
     final kind = _kind!;
+    final typingDesc = _descFocus.hasFocus;
+    final amountActive = !typingDesc;
+    final amountSize = MediaQuery.sizeOf(context).height < 720 ? 52.0 : 60.0;
     final cats = state.categories.where((c) => c.type == (kind == _Kind.income ? 'Entrada' : 'Saída'));
     final kinds = [_Kind.expense, _Kind.income, if (multi || kind == _Kind.transfer) _Kind.transfer];
     String kindLabel(_Kind k) => switch (k) {
@@ -263,23 +314,56 @@ class _NovaScreenState extends State<NovaScreen> {
         label: kindLabel,
         onChanged: (k) => setState(() => _setKind(k, state)),
       ),
-      const SizedBox(height: 14),
-      BigAmount(_cents, size: 60, alignment: Alignment.center, color: _error != null ? Palette.neg : Palette.text),
+      const SizedBox(height: 10),
+      Focus(
+        focusNode: _amountFocus,
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: Semantics(
+          button: true,
+          selected: amountActive,
+          label: s.amount,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _selectAmount,
+            child: AnimatedContainer(
+              key: const ValueKey('nova-amount'),
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.only(top: 6, bottom: 8),
+              decoration: BoxDecoration(
+                  border: Border(
+                      bottom: BorderSide(color: amountActive ? Palette.accent : Palette.surface2, width: amountActive ? 2 : 1))),
+              child: BigAmount(_cents,
+                  size: amountSize, alignment: Alignment.center, color: _error != null ? Palette.neg : Palette.text),
+            ),
+          ),
+        ),
+      ),
       if (_error != null)
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Palette.neg, fontSize: 13)),
         ),
-      const SizedBox(height: 18),
-      Container(
+      const SizedBox(height: 14),
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.only(bottom: 10),
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Palette.surface2))),
+        decoration: BoxDecoration(
+            border: Border(
+                bottom: BorderSide(color: typingDesc ? Palette.accent : Palette.surface2, width: typingDesc ? 2 : 1))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Lbl(s.description),
           const SizedBox(height: 8),
           TextField(
             controller: _desc,
+            focusNode: _descFocus,
             textInputAction: TextInputAction.done,
+            // "done" (or Enter) goes back to the amount and its keypad
+            onSubmitted: (_) => _selectAmount(),
+            // tapping anywhere else (a category, the date, the keypad) closes the system keyboard
+            onTapOutside: (_) {
+              if (_descFocus.hasFocus) _selectAmount();
+            },
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w500),
             decoration: InputDecoration.collapsed(
                 hintText: switch (kind) {
@@ -291,7 +375,7 @@ class _NovaScreenState extends State<NovaScreen> {
           ),
         ]),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 14),
       if (kind == _Kind.transfer) ...[
         Lbl(s.from),
         const SizedBox(height: 8),
@@ -353,10 +437,7 @@ class _NovaScreenState extends State<NovaScreen> {
       ]),
     ];
 
-    return Focus(
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: Palette.bg,
         body: SafeArea(
           child: Padding(
@@ -386,9 +467,13 @@ class _NovaScreenState extends State<NovaScreen> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: LayoutBuilder(builder: (context, c) {
-                    final keyH = c.maxHeight < 600 ? 44.0 : 52.0;
+                    // keys shrink on short screens so categories, date and status stay in view
+                    final keyH = ((c.maxHeight - 430) / 4 - 6).clamp(40.0, 52.0);
+                    final side = c.maxWidth >= 600 && c.maxHeight < 520;
                     final pad = _Keypad(
                         keyHeight: keyH,
+                        // the system keyboard takes the keypad's place while typing the description
+                        showKeys: side || !typingDesc,
                         onKey: _key,
                         onSave: _save,
                         s: s,
@@ -400,7 +485,7 @@ class _NovaScreenState extends State<NovaScreen> {
                                 _Kind.transfer => s.addTransfer,
                               });
                     // landscape phones / short windows: fields and keypad side by side
-                    if (c.maxWidth >= 600 && c.maxHeight < 520) {
+                    if (side) {
                       return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Expanded(child: ListView(children: fields)),
                         const SizedBox(width: 24),
@@ -409,9 +494,9 @@ class _NovaScreenState extends State<NovaScreen> {
                     }
                     return Column(children: [
                       Expanded(child: ListView(children: fields)),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 10),
                       pad,
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                     ]);
                   }),
                 ),
@@ -419,7 +504,6 @@ class _NovaScreenState extends State<NovaScreen> {
             ]),
           ),
         ),
-      ),
     );
   }
 }
@@ -467,10 +551,16 @@ class _Segmented<T> extends StatelessWidget {
 
 class _Keypad extends StatelessWidget {
   const _Keypad(
-      {required this.keyHeight, required this.onKey, required this.onSave, required this.s, required this.label});
+      {required this.keyHeight,
+      required this.onKey,
+      required this.onSave,
+      required this.s,
+      required this.label,
+      this.showKeys = true});
   final S s;
   final String label;
   final double keyHeight;
+  final bool showKeys;
   final ValueChanged<String> onKey;
   final VoidCallback onSave;
 
@@ -483,12 +573,34 @@ class _Keypad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 150),
+          alignment: Alignment.topCenter,
+          child: showKeys ? _keys() : const SizedBox(width: double.infinity),
+        ),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: FilledButton(
+            onPressed: onSave,
+            style: FilledButton.styleFrom(
+              backgroundColor: Palette.accent,
+              foregroundColor: Palette.bg,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            child: Text(label),
+          ),
+        ),
+      ]);
+
+  Widget _keys() => Column(mainAxisSize: MainAxisSize.min, children: [
         for (final row in _rows)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 6),
             child: Row(children: [
               for (var i = 0; i < row.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
+                if (i > 0) const SizedBox(width: 6),
                 Expanded(
                   child: Material(
                     color: Palette.surface,
@@ -510,20 +622,6 @@ class _Keypad extends StatelessWidget {
               ],
             ]),
           ),
-        const SizedBox(height: 4),
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: FilledButton(
-            onPressed: onSave,
-            style: FilledButton.styleFrom(
-              backgroundColor: Palette.accent,
-              foregroundColor: Palette.bg,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            child: Text(label),
-          ),
-        ),
+        const SizedBox(height: 2),
       ]);
 }

@@ -14,7 +14,9 @@ The same app as the PWA in the repo root, built with Flutter so it runs natively
 Short windows (phones in landscape, height < 560) get a compact rail and a side-by-side
 Nova despesa (fields left, keypad right). Big amounts shrink to fit instead of overflowing
 on 320px phones, and Previsão shows as many bars as fit the width. With a physical
-keyboard, Nova despesa accepts digits, Backspace and Enter.
+keyboard, Nova despesa accepts digits, Backspace and Enter while the amount is selected;
+a letter starts the description. Tapping the description hides the keypad for the system keyboard;
+tapping the amount (or anywhere else) brings it back.
 
 Breakpoints live in `lib/src/layout.dart`.
 
@@ -117,4 +119,5 @@ test/widget_test.dart         renders every tab at 5 screen sizes, adds an expen
 test/account_test.dart        encryption, sign-up/in, recovery, sync, conflicts (fake server)
 test/i18n_test.dart           number/currency formatting, amount parsing, saved preferences
 test/accounts_test.dart       per-account balances, transfers, savings, per-account forecast
+test/nova_test.dart           Nova despesa as a user: fits on phones, amount/description typed apart, calendar header
 ```
