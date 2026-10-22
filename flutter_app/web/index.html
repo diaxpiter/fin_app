@@ -5,14 +5,17 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Page kept inside the safe area (opaque status bar, no "cover"): Flutter web doesn't pad for the
+       notch or the home indicator, so on an iPhone home-screen app the page slid under them. Touches
+       then landed below where they were drawn (+ opened Fixas, the bottom bar seemed dead). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Ciclos, movimentos e previsão das tuas finanças.">
   <meta name="theme-color" content="#0B0B0C">
 
   <!-- iOS: installs from Safari → Share → Add to Home Screen -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Painel">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
