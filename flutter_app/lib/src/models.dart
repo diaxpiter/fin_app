@@ -236,12 +236,16 @@ class Config {
   const Config({
     required this.cycleStartDay,
     required this.openingBalance,
+    this.cycleShift = DayShift.none,
     this.language,
     this.currency = 'EUR',
     this.holidays = 'PT',
     this.lastBackup,
   });
   final int cycleStartDay, openingBalance;
+
+  /// Moves the cycle start off weekends/holidays (match the salary bill's rule). Ignored for day 1.
+  final DayShift cycleShift;
 
   /// Date (YYYY-MM-DD) the data was last exported as a file; null = never.
   final String? lastBackup;
@@ -258,6 +262,7 @@ class Config {
   Config copyWith(
           {int? cycleStartDay,
           int? openingBalance,
+          DayShift? cycleShift,
           String? language,
           bool clearLanguage = false,
           String? currency,
@@ -266,6 +271,7 @@ class Config {
       Config(
         cycleStartDay: cycleStartDay ?? this.cycleStartDay,
         openingBalance: openingBalance ?? this.openingBalance,
+        cycleShift: cycleShift ?? this.cycleShift,
         language: clearLanguage ? null : (language ?? this.language),
         currency: currency ?? this.currency,
         holidays: holidays ?? this.holidays,
@@ -281,6 +287,7 @@ class Config {
     return Config(
       cycleStartDay: day,
       openingBalance: (j['openingBalance'] as num).toInt(),
+      cycleShift: DayShift.values.asNameMap()[j['cycleShift']] ?? DayShift.none,
       language: j['language'] as String?,
       currency: currency,
       holidays: (j['holidays'] as String?) ?? 'PT',
@@ -290,6 +297,7 @@ class Config {
   Map<String, dynamic> toJson() => {
         'cycleStartDay': cycleStartDay,
         'openingBalance': openingBalance,
+        if (cycleShift != DayShift.none) 'cycleShift': cycleShift.name,
         if (language != null) 'language': language,
         'currency': currency,
         'holidays': holidays,

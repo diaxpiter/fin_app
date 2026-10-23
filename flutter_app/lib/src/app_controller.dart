@@ -83,7 +83,7 @@ class AppController extends ChangeNotifier {
     final cycles = computeCycles(state, t);
     if (_cycle == null || !cycles.any((c) => c.id == _cycle)) {
       // today's cycle, unless it is empty: then the next cycle that has movements
-      final todayId = cycleIdOf(t, state.config.cycleStartDay);
+      final todayId = cycleIdOf(t, state.config.cycle);
       final cur = cycles.where((c) => c.id == todayId).firstOrNull;
       final withItems = cycles.where((c) => c.id.compareTo(todayId) >= 0 && c.items.isNotEmpty).firstOrNull;
       _cycle = (cur != null && cur.items.isNotEmpty) || withItems == null ? todayId : withItems.id;
@@ -120,7 +120,7 @@ class AppController extends ChangeNotifier {
     String? account,
     String? toAccount,
   }) {
-    _cycle = cycleIdOf(date, store.state.config.cycleStartDay);
+    _cycle = cycleIdOf(date, store.state.config.cycle);
     tab = 0;
     store.addMovement(
         date: date,

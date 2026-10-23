@@ -86,6 +86,7 @@ class AjustesScreen extends StatelessWidget {
         PrefRow(label: s.language, child: const LanguagePicker()),
         PrefRow(label: s.currency, child: const CurrencyPicker()),
         PrefRow(label: s.startDay, hint: s.startDayHint, child: const StartDayPicker()),
+        PrefRow(label: s.cycleShift, hint: s.cycleShiftHint, child: const CycleShiftPicker()),
         PrefRow(label: s.holidays, hint: s.holidaysHint, child: const HolidaysPicker()),
         section(s.data),
         Container(height: 1, color: Palette.line),

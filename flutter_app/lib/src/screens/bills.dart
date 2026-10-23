@@ -44,7 +44,7 @@ class BillRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final m = app.model;
-    final now = cycleIdOf(m.today, m.state.config.cycleStartDay);
+    final now = cycleIdOf(m.today, m.state.config.cycle);
     final income = m.isIncome(bill.category);
     final ended = bill.to != null && bill.to!.compareTo(now) < 0;
     return Opacity(
@@ -148,7 +148,7 @@ class _BillFormState extends State<_BillForm> {
     if (cents == null || cents <= 0) return setState(() => _error = s.enterAmountExample);
     final m = app.model;
     // a new bill starts in the current cycle unless a first payment was picked; it never fills past months
-    final from = _from ?? (_isNew ? cycleIdOf(m.today, m.state.config.cycleStartDay) : null);
+    final from = _from ?? (_isNew ? cycleIdOf(m.today, m.state.config.cycle) : null);
     if (from != null && _to != null && _to!.compareTo(from) < 0) return setState(() => _error = s.endBeforeStart);
     final old = widget.bill;
     app.store.saveRecurring(
@@ -174,7 +174,7 @@ class _BillFormState extends State<_BillForm> {
   /// When the bill will next fall, with the weekend/holiday rule applied, e.g. "sexta, 23 out".
   String _nextDate(Model m) {
     final lang = AppScope.of(context, listen: false).lang;
-    final start = m.state.config.cycleStartDay;
+    final start = m.state.config.cycle;
     var cycle = cycleIdOf(m.today, start);
     for (var i = 0; i < 3; i++, cycle = nextCycleId(cycle)) {
       final d = shiftToBusinessDay(occurrenceDate(_day, cycle, start), _shift, m.state.config.holidays);
@@ -186,12 +186,12 @@ class _BillFormState extends State<_BillForm> {
   /// The date the bill falls on in [cycle], e.g. "25 nov 2026".
   String _dateIn(Model m, String cycle, String lang) {
     final d = shiftToBusinessDay(
-        occurrenceDate(_day, cycle, m.state.config.cycleStartDay), _shift, m.state.config.holidays);
+        occurrenceDate(_day, cycle, m.state.config.cycle), _shift, m.state.config.holidays);
     return '${formatDay(d, lang)} ${parseISO(d).y}';
   }
 
   Future<void> _pickFirst(Model m) async {
-    final start = m.state.config.cycleStartDay;
+    final start = m.state.config.cycle;
     final initial = _from == null ? m.today : occurrenceDate(_day, _from!, start);
     final d = await pickDate(context, initial);
     if (d == null) return;
@@ -203,7 +203,7 @@ class _BillFormState extends State<_BillForm> {
   }
 
   Future<void> _pickLast(Model m) async {
-    final start = m.state.config.cycleStartDay;
+    final start = m.state.config.cycle;
     final initial = _to != null
         ? occurrenceDate(_day, _to!, start)
         : occurrenceDate(_day, nextCycleId(_from ?? cycleIdOf(m.today, start), 11), start);
@@ -229,7 +229,7 @@ class _BillFormState extends State<_BillForm> {
     final app = AppScope.of(context);
     final s = app.s;
     final m = app.model;
-    final now = cycleIdOf(m.today, m.state.config.cycleStartDay);
+    final now = cycleIdOf(m.today, m.state.config.cycle);
 
     InputDecoration deco(String label, {String? suffix, String? hint}) => InputDecoration(
           labelText: label,

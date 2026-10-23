@@ -9,23 +9,33 @@ void main() {
   group('fixed bills', recurringTests);
 
   test('cycle ids and bounds (start day 23)', () {
-    expect(cycleIdOf('2026-10-23', 23), '2026-11');
-    expect(cycleIdOf('2026-11-22', 23), '2026-11');
-    expect(cycleIdOf('2026-11-23', 23), '2026-12');
-    expect(cycleIdOf('2026-10-16', 23), '2026-10');
-    expect(cycleBounds('2026-11', 23), (start: '2026-10-23', end: '2026-11-22'));
-    expect(cycleBounds('2027-01', 23), (start: '2026-12-23', end: '2027-01-22'));
+    expect(cycleIdOf('2026-10-23', const CycleRule(23)), '2026-11');
+    expect(cycleIdOf('2026-11-22', const CycleRule(23)), '2026-11');
+    expect(cycleIdOf('2026-11-23', const CycleRule(23)), '2026-12');
+    expect(cycleIdOf('2026-10-16', const CycleRule(23)), '2026-10');
+    expect(cycleBounds('2026-11', const CycleRule(23)), (start: '2026-10-23', end: '2026-11-22'));
+    expect(cycleBounds('2027-01', const CycleRule(23)), (start: '2026-12-23', end: '2027-01-22'));
+  });
+
+  test('a cycle can start on the business day before a weekend payday', () {
+    const r = CycleRule(25, DayShift.before);
+    // 25 Oct 2026 is a Sunday: pay (and the new cycle) arrives Friday the 23rd
+    expect(cycleIdOf('2026-10-22', r), '2026-10');
+    expect(cycleIdOf('2026-10-23', r), '2026-11');
+    expect(cycleBounds('2026-11', r), (start: '2026-10-23', end: '2026-11-24'));
+    // 25 Dec is a holiday: the next cycle starts on the 24th
+    expect(cycleBounds('2027-01', r), (start: '2026-12-24', end: '2027-01-24'));
   });
 
   test('calendar-month cycles when start day is 1', () {
-    expect(cycleIdOf('2026-03-15', 1), '2026-03');
-    expect(cycleBounds('2026-02', 1), (start: '2026-02-01', end: '2026-02-28'));
+    expect(cycleIdOf('2026-03-15', const CycleRule(1)), '2026-03');
+    expect(cycleBounds('2026-02', const CycleRule(1)), (start: '2026-02-01', end: '2026-02-28'));
   });
 
   test('recurring occurrence lands inside its cycle', () {
-    expect(occurrenceDate(25, '2026-12', 23), '2026-11-25');
-    expect(occurrenceDate(11, '2026-12', 23), '2026-12-11');
-    expect(occurrenceDate(27, '2026-12', 23), '2026-11-27');
+    expect(occurrenceDate(25, '2026-12', const CycleRule(23)), '2026-11-25');
+    expect(occurrenceDate(11, '2026-12', const CycleRule(23)), '2026-12-11');
+    expect(occurrenceDate(27, '2026-12', const CycleRule(23)), '2026-11-27');
   });
 
   test('money formatting and parsing', () {
@@ -156,6 +166,6 @@ void recurringTests() {
     final s = blank([bill()]);
     s.movements = [Movement(id: 'm1', date: '2026-11-07', description: 'Renda', category: 'Moradia', cents: 990, estado: 'Pago')];
     final out = syncRecurring(s, '2026-11-10')!;
-    expect(out.where((m) => cycleIdOf(m.date, 1) == '2026-11'), hasLength(1));
+    expect(out.where((m) => cycleIdOf(m.date, const CycleRule(1)) == '2026-11'), hasLength(1));
   });
 }

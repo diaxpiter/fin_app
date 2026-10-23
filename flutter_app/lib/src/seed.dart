@@ -60,7 +60,7 @@ AppState seedState() {
     config: config,
     categories: [...categories],
     recurring: [...recurring],
-    movements: [...first, ...expandRecurring(recurring, ids, config.cycleStartDay, overrides)],
+    movements: [...first, ...expandRecurring(recurring, ids, config.cycle, overrides)],
   );
 }
 

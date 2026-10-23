@@ -138,6 +138,26 @@ class StartDayPicker extends StatelessWidget {
   }
 }
 
+/// Moves the cycle start off weekends/holidays, like the salary bill does.
+class CycleShiftPicker extends StatelessWidget {
+  const CycleShiftPicker({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    return _Box<DayShift>(
+      value: app.store.state.config.cycleShift,
+      items: [for (final d in DayShift.values) DropdownMenuItem(value: d, child: Text(app.s.shift(d)))],
+      onChanged: (d) {
+        if (d != null && d != app.store.state.config.cycleShift) {
+          app.store.setCycleShift(d);
+          app.resetCycle();
+        }
+      },
+    );
+  }
+}
+
 /// Asks "how much is in your account today?" and derives the opening balance from it.
 Future<void> editBalance(BuildContext context) async {
   final app = AppScope.of(context, listen: false);

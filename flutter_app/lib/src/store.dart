@@ -372,13 +372,21 @@ class Store extends ChangeNotifier {
   /// Whose holidays count for bills that move off non-business days; replans those bills.
   void setHolidays(String country) {
     _state.config = _state.config.copyWith(holidays: country);
-    final shifting = _state.recurring.where((r) => r.shift != DayShift.none).map((r) => r.id).toSet();
+    // holidays also move the cycle boundaries when the cycle start shifts, which affects every bill
+    final shifting = _state.recurring
+        .where((r) => r.shift != DayShift.none || _state.config.cycleShift != DayShift.none)
+        .map((r) => r.id)
+        .toSet();
     _state.movements = syncRecurring(_state, todayISO(), regenerate: shifting) ?? _state.movements;
     _commit();
   }
 
-  void setStartDay(int day) {
-    _state.config = _state.config.copyWith(cycleStartDay: day);
+  void setStartDay(int day) => _setCycle(_state.config.copyWith(cycleStartDay: day));
+
+  void setCycleShift(DayShift shift) => _setCycle(_state.config.copyWith(cycleShift: shift));
+
+  void _setCycle(Config config) {
+    _state.config = config;
     // planned bills move to the new cycles
     _state.movements = syncRecurring(_state, todayISO(), regenerate: _state.recurring.map((r) => r.id).toSet()) ??
         _state.movements;

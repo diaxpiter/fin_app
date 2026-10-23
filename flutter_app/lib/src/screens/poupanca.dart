@@ -19,7 +19,7 @@ class PoupancaScreen extends StatelessWidget {
     final app = AppScope.of(context);
     final s = app.s;
     final m = app.model;
-    final todayCycle = cycleIdOf(m.today, m.state.config.cycleStartDay);
+    final todayCycle = cycleIdOf(m.today, m.state.config.cycle);
     final net = netWorth(m.state);
     final i = m.cycles.indexWhere((c) => c.id == todayCycle);
     final from = math.max(0, math.max(0, i) - 5);

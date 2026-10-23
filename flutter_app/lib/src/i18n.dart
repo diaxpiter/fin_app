@@ -440,6 +440,10 @@ class S {
   String get currency => _t('Moeda', 'Currency');
   String currencyName(String code) => '${lang == 'pt' ? currencies[code]!.$1 : currencies[code]!.$2} ($code)';
   String get data => _t('Dados', 'Data');
+  String get cycleShift => _t('Se esse dia for fim de semana ou feriado', 'If that day is a weekend or holiday');
+  String get cycleShiftHint => _t(
+      'Usa a mesma regra da conta do salário para o ciclo começar no dia em que realmente recebes. Ignorado no dia 1.',
+      "Use the same rule as your salary bill so cycles start the day you're actually paid. Ignored for day 1.");
   String get startDay => _t('Dia de início do ciclo', 'Cycle start day');
   String startDaySub(int d) => _t('Os ciclos começam no dia $d', 'Cycles start on day $d');
   String get exportData => _t('Exportar dados', 'Export data');

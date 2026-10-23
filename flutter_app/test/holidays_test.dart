@@ -52,7 +52,7 @@ void main() {
     final s = withSalary(startDay: 25);
     s.movements = syncRecurring(s, '2026-10-01')!;
     final oct = s.movements.firstWhere((m) => m.date == '2026-10-23');
-    expect(cycleIdOf(oct.date, 25), '2026-10', reason: 'by date it would fall in the previous cycle');
+    expect(cycleIdOf(oct.date, const CycleRule(25)), '2026-10', reason: 'by date it would fall in the previous cycle');
     expect(oct.cycle, '2026-11');
     final cycles = {for (final c in computeCycles(s, '2026-10-01')) c.id: c};
     expect(cycles['2026-11']!.receitas, 100000);

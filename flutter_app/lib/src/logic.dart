@@ -34,23 +34,41 @@ String todayISO([DateTime? now]) {
 }
 
 // ---- Cycles -----------------------------------------------------------
-// A cycle starts on `startDay` and ends the day before the next start.
+// A cycle starts on the rule's day and ends the day before the next start.
 // Its id is "YYYY-MM" of the month in which it ENDS (23 Oct–22 Nov = "2026-11").
-// With startDay = 1 it is simply the calendar month.
+// With day = 1 it is simply the calendar month.
 
-String cycleIdOf(String dateISO, int startDay) {
+/// Where cycles start: [day] of each month, moved off weekends/holidays by [shift]
+/// (so a cycle can start the business day before a Sunday payday, like the salary does).
+class CycleRule {
+  const CycleRule(this.day, [this.shift = DayShift.none, this.holidays = 'PT']);
+  final int day;
+  final DayShift shift;
+  final String holidays;
+
+  /// Start date of the cycle that begins in month [y]-[m].
+  String startIn(int y, int m) {
+    final d = iso(y, m, day);
+    return day == 1 ? d : shiftToBusinessDay(d, shift, holidays);
+  }
+}
+
+extension CycleOf on Config {
+  CycleRule get cycle => CycleRule(cycleStartDay, cycleShift, holidays);
+}
+
+String cycleIdOf(String dateISO, CycleRule rule) {
   final p = parseISO(dateISO);
-  final YM start = p.d >= startDay ? (y: p.y, m: p.m) : addMonths(p.y, p.m, -1);
-  final end = startDay == 1 ? start : addMonths(start.y, start.m, 1);
+  final YM start = dateISO.compareTo(rule.startIn(p.y, p.m)) >= 0 ? (y: p.y, m: p.m) : addMonths(p.y, p.m, -1);
+  final end = rule.day == 1 ? start : addMonths(start.y, start.m, 1);
   return '${end.y}-${pad(end.m)}';
 }
 
-({String start, String end}) cycleBounds(String id, int startDay) {
+({String start, String end}) cycleBounds(String id, CycleRule rule) {
   final e = _ym(id);
-  final s = startDay == 1 ? e : addMonths(e.y, e.m, -1);
+  final s = rule.day == 1 ? e : addMonths(e.y, e.m, -1);
   final next = addMonths(s.y, s.m, 1);
-  final endDate = DateTime.utc(next.y, next.m, startDay - 1);
-  return (start: iso(s.y, s.m, startDay), end: iso(endDate.year, endDate.month, endDate.day));
+  return (start: rule.startIn(s.y, s.m), end: addDays(rule.startIn(next.y, next.m), -1));
 }
 
 String nextCycleId(String id, [int n = 1]) {
@@ -115,17 +133,17 @@ int? parseMoney(String str) {
 
 // ---- Recurring bills -> movements ------------------------------------
 
-String occurrenceDate(int day, String cycleId, int startDay) {
+String occurrenceDate(int day, String cycleId, CycleRule rule) {
   final e = _ym(cycleId);
-  final s = startDay == 1 ? e : addMonths(e.y, e.m, -1);
-  final t = startDay == 1 || day >= startDay ? s : addMonths(s.y, s.m, 1);
+  final s = rule.day == 1 ? e : addMonths(e.y, e.m, -1);
+  final t = rule.day == 1 || day >= rule.day ? s : addMonths(s.y, s.m, 1);
   final d = day < daysInMonth(t.y, t.m) ? day : daysInMonth(t.y, t.m);
   return iso(t.y, t.m, d);
 }
 
 // `overrides` maps "recId:cycleId" -> cents. Bills with a [DayShift] move off
 // weekends and [holidays] ('PT', or 'none' for weekends only).
-List<Movement> expandRecurring(List<Recurring> recurring, List<String> cycleIds, int startDay,
+List<Movement> expandRecurring(List<Recurring> recurring, List<String> cycleIds, CycleRule rule,
     [Map<String, int> overrides = const {}, String holidays = 'PT']) {
   final out = <Movement>[];
   for (final cycleId in cycleIds) {
@@ -133,12 +151,12 @@ List<Movement> expandRecurring(List<Recurring> recurring, List<String> cycleIds,
       if (r.from != null && cycleId.compareTo(r.from!) < 0) continue;
       if (r.to != null && cycleId.compareTo(r.to!) > 0) continue;
       final key = '${r.id}:$cycleId';
-      final date = shiftToBusinessDay(occurrenceDate(r.day, cycleId, startDay), r.shift, holidays);
+      final date = shiftToBusinessDay(occurrenceDate(r.day, cycleId, rule), r.shift, holidays);
       out.add(Movement(
         id: 'gen:$key',
         date: date,
         // moved across the cycle boundary (e.g. paid early): still counts in its own cycle
-        cycle: cycleIdOf(date, startDay) == cycleId ? null : cycleId,
+        cycle: cycleIdOf(date, rule) == cycleId ? null : cycleId,
         description: r.description,
         category: r.category,
         cents: overrides[key] ?? r.cents,
@@ -169,7 +187,7 @@ String? _genRecurringId(Movement m) => m.gen ? m.id.split(':')[1] : null;
 /// - A cycle that already has a movement with the same description and
 ///   category (e.g. typed in by hand) doesn't get a duplicate.
 List<Movement>? syncRecurring(AppState state, String today, {Set<String> regenerate = const {}}) {
-  final s = state.config.cycleStartDay;
+  final s = state.config.cycle;
   final cur = cycleIdOf(today, s);
   var changed = false;
 
@@ -207,7 +225,7 @@ String _norm(String s) => s.trim().toLowerCase();
 /// description, or one equal to the category name, matches any of them.
 List<Movement> matchPlanned(AppState state,
     {required String date, required String description, required String category}) {
-  final s = state.config.cycleStartDay;
+  final s = state.config.cycle;
   final cycle = cycleIdOf(date, s);
   final d = _norm(description);
   final anyInCategory = d.isEmpty || d == _norm(category);
@@ -226,7 +244,7 @@ List<Movement> matchPlanned(AppState state,
 // ---- Totals -----------------------------------------------------------
 
 /// The cycle a movement counts in: its own date's, unless it was moved across a boundary.
-String cycleOfMovement(Movement m, int startDay) => m.cycle ?? cycleIdOf(m.date, startDay);
+String cycleOfMovement(Movement m, CycleRule rule) => m.cycle ?? cycleIdOf(m.date, rule);
 
 Map<String, String> typesOf(AppState s) => {for (final c in s.categories) c.name: c.type};
 bool _isIncome(Movement m, Map<String, String> types) => types[m.category] == 'Entrada';
@@ -281,7 +299,7 @@ class Cycle {
 }
 
 List<Cycle> computeCycles(AppState state, [String? today]) {
-  final s = state.config.cycleStartDay;
+  final s = state.config.cycle;
   final types = typesOf(state);
 
   final ids = {cycleIdOf(today ?? todayISO(), s), for (final m in state.movements) cycleOfMovement(m, s)};

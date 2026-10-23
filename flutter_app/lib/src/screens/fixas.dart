@@ -19,7 +19,7 @@ class FixasScreen extends StatelessWidget {
     final s = app.s;
     final m = app.model;
     final rec = [...m.state.recurring]..sort((a, b) => a.day.compareTo(b.day));
-    final now = cycleIdOf(m.today, m.state.config.cycleStartDay);
+    final now = cycleIdOf(m.today, m.state.config.cycle);
     final active = rec.where((r) => r.to == null || r.to!.compareTo(now) >= 0);
     final out =
         active.where((r) => !m.isIncome(r.category) && !m.isTransferCategory(r.category)).fold(0, (a, r) => a + r.cents);

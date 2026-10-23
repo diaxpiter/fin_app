@@ -164,7 +164,7 @@ class _NovaScreenState extends State<NovaScreen> {
           toAccount: _toAccount,
           clearToAccount: !transfer));
       app.pickCycle(cycleOfMovement(app.store.state.movements.firstWhere((m) => m.id == old.id),
-          app.store.state.config.cycleStartDay));
+          app.store.state.config.cycle));
       message = s.movementUpdated;
     } else {
       // a payment for a bill that's already planned settles it instead of adding a duplicate
@@ -185,7 +185,7 @@ class _NovaScreenState extends State<NovaScreen> {
             toAccount: _toAccount);
       } else {
         app.store.payPlanned(choice, cents: _cents, date: _date!);
-        app.pickCycle(cycleIdOf(_date!, app.store.state.config.cycleStartDay));
+        app.pickCycle(cycleIdOf(_date!, app.store.state.config.cycle));
         app.setTab(0);
         message = s.markedPaid;
       }
