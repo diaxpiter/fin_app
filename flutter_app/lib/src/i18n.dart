@@ -96,7 +96,7 @@ class S {
   String get navMovements => _t('Movimentos', 'Transactions');
   String get navForecast => _t('Previsão', 'Forecast');
   String get navCategories => _t('Categorias', 'Categories');
-  String get navSavings => _t('Poupança', 'Savings');
+  String get navDashboard => _t('Painel', 'Dashboard');
   String get navPlan => _t('Plano', 'Plan');
   String get navBills => _t('Fixas', 'Bills');
   String get newExpense => _t('Nova despesa', 'New expense');
@@ -170,6 +170,16 @@ class S {
   String get budgetSet => _t('Orçamento guardado', 'Budget saved');
 
   // ---- savings ----
+  String get dashSavingsRate => _t('Taxa de poupança', 'Savings rate');
+  String get dashAvgSpend => _t('Gasto médio por ciclo', 'Average spend per cycle');
+  String get dashRunway => _t('Autonomia', 'Runway');
+  String dashMonths(double n) =>
+      _t('${n.toStringAsFixed(1).replaceAll('.', ',')} meses', '${n.toStringAsFixed(1)} months');
+  String get dashRunwayHint => _t('Dinheiro à mão ÷ gasto médio', 'Cash on hand ÷ average spend');
+  String get dashFixedShare => _t('Fixas / rendimento', 'Bills / income');
+  String get dashFixedHint => _t('Parte do rendimento já comprometida', 'Share of income already committed');
+  String get dashIncomeVsSpend => _t('Receitas vs despesas', 'Income vs spending');
+  String get dashSpendNow => _t('Gastos neste ciclo', 'Spending this cycle');
   String get netWorth => _t('Património', 'Net worth');
   String netWorthEnd(String a) => _t('Previsto no fim do plano: $a', 'Projected at the end of the plan: $a');
   String savedRate(int n) => _t('Poupaste em média $n% do rendimento nos últimos ciclos.',

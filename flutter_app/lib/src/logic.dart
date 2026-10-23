@@ -476,6 +476,42 @@ int? recentSavingsRate(List<Cycle> cycles, String todayCycle) {
   return (last.fold<int>(0, (a, c) => a + c.savingsRate) / last.length).round();
 }
 
+/// Headline numbers for the dashboard, from the (up to) three latest cycles up to [todayCycle]
+/// that had income or spending.
+class DashStats {
+  const DashStats({this.avgSpend = 0, this.avgIncome = 0, this.savingsRate, this.runwayMonths, this.fixedShare});
+  final int avgSpend, avgIncome;
+
+  /// Average % of income saved; null without income.
+  final int? savingsRate;
+
+  /// Months the everyday cash would last at the average spend; null when there is none of either.
+  final double? runwayMonths;
+
+  /// % of the average income already committed to fixed bills; null without income.
+  final int? fixedShare;
+}
+
+DashStats dashStats(AppState state, List<Cycle> cycles, String todayCycle) {
+  final recent = cycles.where((c) => c.id.compareTo(todayCycle) <= 0 && (c.receitas > 0 || c.despesas > 0)).toList();
+  final last = recent.reversed.take(3).toList();
+  if (last.isEmpty) return const DashStats();
+  final spend = last.fold<int>(0, (a, c) => a + c.despesas) ~/ last.length;
+  final income = last.fold<int>(0, (a, c) => a + c.receitas) ~/ last.length;
+  final types = typesOf(state);
+  final fixed = state.recurring
+      .where((r) => types[r.category] == 'Saída' && (r.to == null || r.to!.compareTo(todayCycle) >= 0))
+      .fold<int>(0, (a, r) => a + r.cents);
+  final cash = cashNow(state);
+  return DashStats(
+    avgSpend: spend,
+    avgIncome: income,
+    savingsRate: recentSavingsRate(cycles, todayCycle),
+    runwayMonths: spend > 0 && cash > 0 ? cash / spend : null,
+    fixedShare: income > 0 ? (fixed * 100 / income).round() : null,
+  );
+}
+
 // ---- Everyday helpers ---------------------------------------------------
 
 String addDays(String date, int n) {

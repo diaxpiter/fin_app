@@ -131,7 +131,8 @@ void everydayTests() {
     await tester.enterText(find.widgetWithText(TextField, 'Já tenho'), '300');
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
-    expect(find.text('Férias'), findsOneWidget);
+    await tester.dragUntilVisible(find.text('300,00 / 900,00'), find.byType(ListView), const Offset(0, -300));
+    expect(find.text('Férias'), findsWidgets); // the goal and its new account
     expect(find.text('300,00 / 900,00'), findsOneWidget);
     expect(find.textContaining('por ciclo'), findsOneWidget);
     expect(tester.takeException(), isNull);

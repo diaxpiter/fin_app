@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('fixed bills', recurringTests);
+  group('dashboard numbers', dashStatsTests);
 
   test('cycle ids and bounds (start day 23)', () {
     expect(cycleIdOf('2026-10-23', const CycleRule(23)), '2026-11');
@@ -115,6 +116,39 @@ void main() {
     final cycles = computeCycles(seedState(), '2026-10-16');
     expect(cycles.first.id, '2026-10');
     expect(cycles.first.items, isEmpty);
+  });
+}
+
+void dashStatsTests() {
+  test('averages, runway and fixed-bill share from the latest cycles', () {
+    Movement mv(String id, String date, String cat, int cents) =>
+        Movement(id: id, date: date, description: id, category: cat, cents: cents, estado: 'Pago');
+    final state = AppState(
+      config: const Config(cycleStartDay: 1, openingBalance: 0),
+      categories: [...categories],
+      recurring: const [Recurring(id: 'r', description: 'Renda', category: 'Moradia', cents: 40000, day: 5)],
+      movements: [
+        mv('i1', '2026-09-02', 'Receita', 200000),
+        mv('e1', '2026-09-10', 'Moradia', 100000),
+        mv('i2', '2026-10-02', 'Receita', 200000),
+        mv('e2', '2026-10-10', 'Moradia', 100000),
+      ],
+    );
+    final s = dashStats(state, computeCycles(state, '2026-10-15'), '2026-10');
+    expect(s.avgIncome, 200000);
+    expect(s.avgSpend, 100000);
+    expect(s.savingsRate, 50);
+    expect(s.runwayMonths, 2.0); // 200 000 in cash / 100 000 a cycle
+    expect(s.fixedShare, 20);
+  });
+
+  test('no history gives no numbers instead of dividing by zero', () {
+    final state = AppState(
+        config: const Config(cycleStartDay: 1, openingBalance: 0), categories: [...categories], recurring: [], movements: []);
+    final s = dashStats(state, computeCycles(state, '2026-10-15'), '2026-10');
+    expect(s.runwayMonths, isNull);
+    expect(s.fixedShare, isNull);
+    expect(s.savingsRate, isNull);
   });
 }
 
