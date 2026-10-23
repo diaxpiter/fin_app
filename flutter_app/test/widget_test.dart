@@ -4,18 +4,22 @@
 import 'package:fin_app/main.dart';
 import 'package:fin_app/src/account.dart';
 import 'package:fin_app/src/app_controller.dart';
+import 'package:fin_app/src/models.dart';
 import 'package:fin_app/src/seed.dart';
 import 'package:fin_app/src/store.dart';
 import 'package:fin_app/src/widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<void> pumpAt(WidgetTester tester, Size size, {String? language = 'pt', DateTime? now}) async {
+Future<void> pumpAt(WidgetTester tester, Size size, {String? language = 'pt', DateTime? now, AppState? state}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final store = Store.memory()..setLanguage(language);
+  final store = Store.memory();
+  if (state != null) store.replaceState(state);
+  store.setLanguage(language);
   final app = AppController(store, clock: () => now ?? DateTime(2026, 11, 1));
   // no backend → guest mode, straight to the app
   final account = AccountController(store: store, backend: null, prefs: null);
@@ -40,6 +44,7 @@ void main() {
   group('accounts', accountTests);
   group('budgets', budgetTests);
   group('home', homeTests);
+  group('desktop', desktopTests);
   group('everyday', everydayTests);
   group('categories and first run', categoryUiTests);
 
@@ -104,7 +109,7 @@ void budgetTests() {
     expect(find.text('LIVRE PARA GASTAR'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.pie_chart_outline).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Moradia'));
+    await tester.tap(find.text('Moradia').first);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '300');
     await tester.tap(find.text('Guardar'));
@@ -113,6 +118,30 @@ void budgetTests() {
     await tester.tap(find.byIcon(Icons.home_outlined).first);
     await tester.pumpAndSettle();
     expect(find.textContaining('Moradia: excedeu o orçamento'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+void desktopTests() {
+  testWidgets('desktop: tables, panes and keys with real data', (tester) async {
+    await pumpAt(tester, const Size(1440, 900), state: seedState());
+    // Movimentos is a table with a column per field
+    await tester.tap(find.byIcon(Icons.format_list_bulleted).first);
+    await tester.pumpAndSettle();
+    expect(find.text('DATA'), findsOneWidget);
+    // the dashboard fills the window: its two panes sit side by side
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit4);
+    await tester.pumpAndSettle();
+    expect(find.text('PATRIMÓNIO'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('RECEITAS VS DESPESAS')).dx, greaterThan(500));
+    for (final icon in [Icons.pie_chart_outline, Icons.event_note_outlined]) {
+      await tester.tap(find.byIcon(icon).first);
+      await tester.pumpAndSettle();
+    }
+    // N opens the new-expense dialog
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pumpAndSettle();
+    expect(find.text('Adicionar despesa'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

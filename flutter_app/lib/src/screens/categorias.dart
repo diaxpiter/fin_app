@@ -44,6 +44,10 @@ class CategoriasScreen extends StatelessWidget {
       children: [
         TopRow(children: [H1(s.navCategories), CyclePicker(m)]),
         const SizedBox(height: 20),
+        TwoPane(
+          leftFlex: 2,
+          rightFlex: 3,
+          left: [
         Lbl(s.spendingByCategory),
         const SizedBox(height: 16),
         if (total == 0)
@@ -74,6 +78,8 @@ class CategoriasScreen extends StatelessWidget {
           _BudgetSummary(spent: spentInBudgets, budget: budgeted)
         else if (suggestions.isNotEmpty)
           _SuggestCard(suggestions: suggestions),
+          ],
+          right: [
         for (final name in rows)
           _CategoryRow(
             name: name,
@@ -86,6 +92,8 @@ class CategoriasScreen extends StatelessWidget {
         Lbl(s.categoriesTitle),
         const SizedBox(height: 10),
         const CategoryManager(),
+          ],
+        ),
       ],
     );
   }

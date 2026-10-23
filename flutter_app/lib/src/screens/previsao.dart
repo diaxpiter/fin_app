@@ -47,6 +47,10 @@ class PrevisaoScreen extends StatelessWidget {
             '${s.cycleCount(plan.length)}'
             '${plan.isNotEmpty ? ' · ${cycleLabel(plan.first.id, lang)} – ${cycleLabel(last.id, lang)}' : ''}',
             style: mono(size: 12, color: Palette.muted)),
+        TwoPane(
+          leftFlex: 2,
+          rightFlex: 3,
+          left: [
         const SizedBox(height: 26),
         Lbl(s.balanceBy(cycleLabel(last.id, lang))),
         const SizedBox(height: 14),
@@ -96,6 +100,8 @@ class PrevisaoScreen extends StatelessWidget {
             ]),
           );
         }),
+          ],
+          right: [
         const SizedBox(height: 26),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -123,6 +129,8 @@ class PrevisaoScreen extends StatelessWidget {
               ]),
             ),
           ),
+          ],
+        ),
       ],
     );
   }

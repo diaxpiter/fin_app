@@ -170,6 +170,9 @@ class S {
   String get budgetSet => _t('Orçamento guardado', 'Budget saved');
 
   // ---- savings ----
+  String get colDate => _t('Data', 'Date');
+  String get colStatus => _t('Estado', 'Status');
+  String get shortcutsHint => _t('N nova despesa · 1–5 separadores', 'N new expense · 1–5 tabs');
   String get dashSavingsRate => _t('Taxa de poupança', 'Savings rate');
   String get dashAvgSpend => _t('Gasto médio por ciclo', 'Average spend per cycle');
   String get dashRunway => _t('Autonomia', 'Runway');

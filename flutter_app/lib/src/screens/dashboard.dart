@@ -54,6 +54,138 @@ class DashboardScreen extends StatelessWidget {
         );
 
     final netSeries = [for (final c in window) c.endBalance];
+    final desk = isDesktop(context);
+    final tall = desk ? 1.5 : 1.0; // charts get taller where there is room
+
+    final netBlock = <Widget>[
+      Lbl(s.netWorth),
+      const SizedBox(height: 14),
+      BigAmount(net, size: 56, color: net < 0 ? Palette.neg : Palette.text),
+      if (window.length >= 2) ...[
+        const SizedBox(height: 18),
+        Semantics(
+          label: describe(s.netWorth, netSeries),
+          child: SizedBox(
+            height: 110 * tall,
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _LinePainter([(Palette.accent, netSeries)], current, fill: true),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        axis(),
+        const SizedBox(height: 4),
+        Text(s.netWorthEnd(app.money.amount(window.last.endBalance)),
+            style: const TextStyle(fontSize: 13, color: Palette.muted)),
+      ],
+    ];
+
+    final kpis = [
+      _Kpi(s.dashSavingsRate, stats.savingsRate == null ? '—' : '${stats.savingsRate}%',
+          stats.savingsRate == null ? null : s.savedRate(stats.savingsRate!)),
+      _Kpi(s.dashAvgSpend, stats.avgSpend == 0 ? '—' : app.money.amount(stats.avgSpend), null),
+      _Kpi(s.dashRunway, stats.runwayMonths == null ? '—' : s.dashMonths(stats.runwayMonths!), s.dashRunwayHint),
+      _Kpi(s.dashFixedShare, stats.fixedShare == null ? '—' : '${stats.fixedShare}%', s.dashFixedHint),
+    ];
+    Widget kpiRow(List<Widget> k) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (var n = 0; n < k.length; n++) ...[if (n > 0) const SizedBox(width: 12), Expanded(child: k[n])],
+        ]);
+
+    final accountsBlock = <Widget>[
+      if (window.length >= 2)
+        section(s.accounts, [
+          Semantics(
+            label: [
+              for (final a in accounts) describe(s.accountName(a), [for (final c in window) c.accountEnd[a.id] ?? 0])
+            ].join('. '),
+            child: SizedBox(
+              height: 150 * tall,
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: _LinePainter([
+                  for (var k = 0; k < accounts.length; k++)
+                    (
+                      _accountColors[k % _accountColors.length],
+                      [for (final c in window) c.accountEnd[accounts[k].id] ?? 0]
+                    ),
+                ], current),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          axis(),
+          const SizedBox(height: 12),
+          for (var k = 0; k < accounts.length; k++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                Dot(_accountColors[k % _accountColors.length]),
+                const SizedBox(width: 10),
+                Expanded(child: Text(s.accountName(accounts[k]), style: const TextStyle(fontSize: 14))),
+                Text(app.money.amount(accountCash(m.state, accounts[k].id)), style: mono(size: 14)),
+              ]),
+            ),
+        ]),
+    ];
+
+    final flowBlock = <Widget>[
+      if (window.length >= 2)
+        section(s.dashIncomeVsSpend, [
+          Semantics(
+            label: '${s.income}: ${window.map((c) => app.money.amount(c.receitas)).join(', ')}. '
+                '${s.expenses}: ${window.map((c) => app.money.amount(c.despesas)).join(', ')}',
+            child: SizedBox(
+              height: 110 * tall,
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: _BarsPainter([for (final c in window) (c.receitas, c.despesas)], current),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          axis(),
+          const SizedBox(height: 10),
+          Row(children: [
+            const Dot(Palette.accent),
+            const SizedBox(width: 6),
+            Text(s.income, style: const TextStyle(fontSize: 12, color: Palette.muted)),
+            const SizedBox(width: 16),
+            const Dot(Palette.neg),
+            const SizedBox(width: 6),
+            Text(s.expenses, style: const TextStyle(fontSize: 12, color: Palette.muted)),
+          ]),
+        ]),
+      if (spend.isNotEmpty)
+        section('${s.dashSpendNow} · ${label(m.cycle.id)}', [
+          for (final e in spend)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Dot(m.colorOf(e.key)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: Text(s.category(e.key), style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis)),
+                  Text(app.money.amount(e.value), style: mono(size: 13)),
+                ]),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: SizedBox(
+                    height: 5,
+                    child: Stack(children: [
+                      Container(color: Palette.line2),
+                      FractionallySizedBox(widthFactor: e.value / spendMax, child: Container(color: m.colorOf(e.key))),
+                    ]),
+                  ),
+                ),
+              ]),
+            ),
+        ]),
+    ];
+
+    final goals = [const SizedBox(height: 32), GoalsList(todayCycle)];
 
     return ScreenList(
       maxWidth: 720,
@@ -68,133 +200,21 @@ class DashboardScreen extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: 24),
-        Lbl(s.netWorth),
-        const SizedBox(height: 14),
-        BigAmount(net, size: 56, color: net < 0 ? Palette.neg : Palette.text),
-        if (window.length >= 2) ...[
-          const SizedBox(height: 18),
-          Semantics(
-            label: describe(s.netWorth, netSeries),
-            child: SizedBox(
-              height: 110,
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _LinePainter([(Palette.accent, netSeries)], current, fill: true),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          axis(),
-          const SizedBox(height: 4),
-          Text(s.netWorthEnd(app.money.amount(window.last.endBalance)),
-              style: const TextStyle(fontSize: 13, color: Palette.muted)),
+        if (desk) ...[
+          // desktop: the four numbers across the top, then charts side by side
+          kpiRow(kpis),
+          const SizedBox(height: 32),
+          TwoPane(left: [...netBlock, ...accountsBlock], right: [...flowBlock, ...goals]),
+        ] else ...[
+          ...netBlock,
+          const SizedBox(height: 24),
+          kpiRow(kpis.sublist(0, 2)),
+          const SizedBox(height: 12),
+          kpiRow(kpis.sublist(2)),
+          ...accountsBlock,
+          ...flowBlock,
+          ...goals,
         ],
-        const SizedBox(height: 24),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-              child: _Kpi(s.dashSavingsRate, stats.savingsRate == null ? '—' : '${stats.savingsRate}%',
-                  stats.savingsRate == null ? null : s.savedRate(stats.savingsRate!))),
-          const SizedBox(width: 12),
-          Expanded(child: _Kpi(s.dashAvgSpend, stats.avgSpend == 0 ? '—' : app.money.amount(stats.avgSpend), null)),
-        ]),
-        const SizedBox(height: 12),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-              child: _Kpi(
-                  s.dashRunway, stats.runwayMonths == null ? '—' : s.dashMonths(stats.runwayMonths!), s.dashRunwayHint)),
-          const SizedBox(width: 12),
-          Expanded(
-              child: _Kpi(s.dashFixedShare, stats.fixedShare == null ? '—' : '${stats.fixedShare}%', s.dashFixedHint)),
-        ]),
-        if (window.length >= 2)
-          section(s.accounts, [
-            Semantics(
-              label: [
-                for (final a in accounts) describe(s.accountName(a), [for (final c in window) c.accountEnd[a.id] ?? 0])
-              ].join('. '),
-              child: SizedBox(
-                height: 150,
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: _LinePainter([
-                    for (var k = 0; k < accounts.length; k++)
-                      (
-                        _accountColors[k % _accountColors.length],
-                        [for (final c in window) c.accountEnd[accounts[k].id] ?? 0]
-                      ),
-                  ], current),
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            axis(),
-            const SizedBox(height: 12),
-            for (var k = 0; k < accounts.length; k++)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(children: [
-                  Dot(_accountColors[k % _accountColors.length]),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(s.accountName(accounts[k]), style: const TextStyle(fontSize: 14))),
-                  Text(app.money.amount(accountCash(m.state, accounts[k].id)), style: mono(size: 14)),
-                ]),
-              ),
-          ]),
-        if (window.length >= 2)
-          section(s.dashIncomeVsSpend, [
-            Semantics(
-              label: '${s.income}: ${window.map((c) => app.money.amount(c.receitas)).join(', ')}. '
-                  '${s.expenses}: ${window.map((c) => app.money.amount(c.despesas)).join(', ')}',
-              child: SizedBox(
-                height: 110,
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: _BarsPainter([for (final c in window) (c.receitas, c.despesas)], current),
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            axis(),
-            const SizedBox(height: 10),
-            Row(children: [
-              const Dot(Palette.accent),
-              const SizedBox(width: 6),
-              Text(s.income, style: const TextStyle(fontSize: 12, color: Palette.muted)),
-              const SizedBox(width: 16),
-              const Dot(Palette.neg),
-              const SizedBox(width: 6),
-              Text(s.expenses, style: const TextStyle(fontSize: 12, color: Palette.muted)),
-            ]),
-          ]),
-        if (spend.isNotEmpty)
-          section('${s.dashSpendNow} · ${label(m.cycle.id)}', [
-            for (final e in spend)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Dot(m.colorOf(e.key)),
-                    const SizedBox(width: 10),
-                    Expanded(
-                        child: Text(s.category(e.key), style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis)),
-                    Text(app.money.amount(e.value), style: mono(size: 13)),
-                  ]),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: SizedBox(
-                      height: 5,
-                      child: Stack(children: [
-                        Container(color: Palette.line2),
-                        FractionallySizedBox(widthFactor: e.value / spendMax, child: Container(color: m.colorOf(e.key))),
-                      ]),
-                    ),
-                  ),
-                ]),
-              ),
-          ]),
-        const SizedBox(height: 32),
-        GoalsList(todayCycle),
       ],
     );
   }

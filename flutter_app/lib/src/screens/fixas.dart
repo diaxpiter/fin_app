@@ -54,6 +54,10 @@ class FixasScreen extends StatelessWidget {
             label: Text(s.newShort),
           ),
         ]),
+        TwoPane(
+          leftFlex: 2,
+          rightFlex: 3,
+          left: [
         const SizedBox(height: 24),
         Container(
           decoration: const BoxDecoration(
@@ -89,6 +93,8 @@ class FixasScreen extends StatelessWidget {
             ]),
           ),
         ],
+          ],
+          right: [
         const SizedBox(height: 24),
         if (rec.isEmpty) ...[
           Text(s.noBillsYet, style: const TextStyle(fontSize: 14, height: 1.45, color: Palette.muted)),
@@ -99,6 +105,8 @@ class FixasScreen extends StatelessWidget {
           const SizedBox(height: 6),
           for (final r in rec) BillRow(r),
         ],
+          ],
+        ),
         const SizedBox(height: 24),
         Text(s.billsNote(recurringHorizon), style: const TextStyle(fontSize: 12, height: 1.5, color: Palette.muted)),
       ],

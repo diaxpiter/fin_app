@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
@@ -158,7 +159,10 @@ class Shell extends StatelessWidget {
     final extended = size == SizeClass.expanded;
     // phones in landscape: too short for labels + buttons in the rail
     final short = isShort(context);
-    return Scaffold(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: extended ? (_, e) => _shortcut(context, app, e) : null,
+      child: Scaffold(
       floatingActionButton: short
           ? FloatingActionButton(
               tooltip: s.newExpense, onPressed: () => openNova(context), child: const Icon(Icons.add))
@@ -186,12 +190,22 @@ class Shell extends StatelessWidget {
             ),
             trailing: short ? null : Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: IconButton(
-                tooltip: s.settings,
-                color: Palette.muted,
-                icon: const Icon(Icons.tune),
-                onPressed: () => openAjustes(context),
-              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(
+                  tooltip: s.settings,
+                  color: Palette.muted,
+                  icon: const Icon(Icons.tune),
+                  onPressed: () => openAjustes(context),
+                ),
+                if (extended) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: 190,
+                    child: Text(s.shortcutsHint,
+                        textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, height: 1.4, color: Palette.muted)),
+                  ),
+                ],
+              ]),
             ),
             destinations: [
               for (final (icon, selected, label) in _destinations(s))
@@ -202,6 +216,32 @@ class Shell extends StatelessWidget {
           Expanded(child: page),
         ]),
       ),
+      ),
     );
+  }
+
+  /// Desktop keys: N opens a new expense, 1–5 switch tab. Left alone while a text field has focus.
+  static KeyEventResult _shortcut(BuildContext context, AppController app, KeyEvent e) {
+    if (e is! KeyDownEvent || HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) {
+      return KeyEventResult.ignored;
+    }
+    if (FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>() != null) {
+      return KeyEventResult.ignored;
+    }
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.keyN) {
+      openNova(context);
+      return KeyEventResult.handled;
+    }
+    final i = [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+      LogicalKeyboardKey.digit5,
+    ].indexOf(k);
+    if (i < 0) return KeyEventResult.ignored;
+    app.setTab(i);
+    return KeyEventResult.handled;
   }
 }
