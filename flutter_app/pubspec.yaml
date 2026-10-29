@@ -16,7 +16,7 @@ dependencies:
   intl: ^0.20.3
   shared_preferences: ^2.3.2
   supabase_flutter: ^2.18.3
-  web: ^1.1.0
+  web: ^1.1.2
 
 dev_dependencies:
   flutter_test:
