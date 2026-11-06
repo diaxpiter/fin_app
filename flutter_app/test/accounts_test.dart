@@ -28,6 +28,26 @@ AppState fourAccounts() => AppState(
     );
 
 void main() {
+  test('running balance after each movement, per account it touches', () {
+    final b = runningBalances(fourAccounts());
+    expect(b['s'], {'activo': 200000});
+    // same day: the transfer ("Dia a dia") sorts before "Renda"
+    expect(b['t1'], {'activo': 160000, 'revolut': 50000});
+    expect(b['r'], {'activo': 100000});
+    expect(b['t2'], {'activo': 70000, 'xtb': 230000});
+    expect(b['c'], {'revolut': 49750});
+    expect(b['p'], {'activo': 20000}, reason: 'Previsto: projected balance');
+  });
+
+  test('a Pago movement shows the real balance, ignoring earlier Previsto ones', () {
+    final s = fourAccounts();
+    s.movements.add(Movement(id: 'early', date: '2026-11-02', description: 'Seguro', category: 'Moradia', cents: 10000, estado: 'Previsto', account: 'activo'));
+    final b = runningBalances(s);
+    expect(b['early'], {'activo': 40000});
+    expect(b['s'], {'activo': 200000});
+    expect(b['p'], {'activo': 10000}, reason: 'the projection counts both planned bills');
+  });
+
   test('each account holds its own balance; transfers move money between them', () {
     final s = fourAccounts();
     expect(accountCash(s, 'activo'), 50000 + 150000 - 60000 - 40000 - 30000);

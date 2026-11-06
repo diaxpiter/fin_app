@@ -88,7 +88,7 @@ class MovimentosScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 22),
           const _TableHeader(),
-          for (final mv in rowsList) _MovementTableRow(mv, m),
+          for (final mv in rowsList) _MovementTableRow(mv, m, m.balanceAfter(mv, account: acc)),
           if (rowsList.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 16),
@@ -116,7 +116,7 @@ class MovimentosScreen extends StatelessWidget {
           for (final (date, list) in groups) ...[
             const SizedBox(height: 22),
             Padding(padding: const EdgeInsets.only(bottom: 4), child: Lbl('${formatDay(date, app.lang)} · ${weekday(date, app.lang)}')),
-            for (final mv in list) MovementRow(mv, m),
+            for (final mv in list) MovementRow(mv, m, balance: m.balanceAfter(mv, account: acc)),
           ],
         ],
       ],
@@ -142,15 +142,17 @@ class _TableHeader extends StatelessWidget {
         if (app.model.multiAccount) Expanded(flex: 3, child: Lbl(s.account)),
         Expanded(flex: 2, child: Lbl(s.colStatus)),
         Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Lbl(s.amount))),
+        Expanded(flex: 2, child: Align(alignment: Alignment.centerRight, child: Lbl(s.colBalance))),
       ]),
     );
   }
 }
 
 class _MovementTableRow extends StatelessWidget {
-  const _MovementTableRow(this.mv, this.m);
+  const _MovementTableRow(this.mv, this.m, this.balance);
   final Movement mv;
   final Model m;
+  final int? balance;
 
   @override
   Widget build(BuildContext context) {
@@ -186,6 +188,11 @@ class _MovementTableRow extends StatelessWidget {
               child: Text('${transfer ? '⇄ ' : (income ? '+' : '−')}${app.money.amount(mv.cents)}',
                   textAlign: TextAlign.right,
                   style: mono(color: income ? Palette.accent : (transfer ? Palette.muted : Palette.text)))),
+          Expanded(
+              flex: 2,
+              child: Text(balance == null ? '' : app.money.amount(balance!),
+                  textAlign: TextAlign.right,
+                  style: mono(size: 13, color: mv.estado == 'Pago' ? Palette.soft : Palette.warn))),
         ]),
       ),
     );

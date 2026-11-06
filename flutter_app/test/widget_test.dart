@@ -420,7 +420,36 @@ void inputTests() {
   });
 }
 
+AppState _spentFrom105() => AppState(
+      config: const Config(cycleStartDay: 1, openingBalance: 0),
+      categories: [...categories],
+      recurring: [],
+      accounts: const [Account(id: 'main', name: 'Conta', openingBalance: 10500)],
+      movements: [
+        Movement(id: 'a', date: '2026-11-02', description: 'Supermercado', category: 'Alimentação', cents: 5500, estado: 'Pago', account: 'main'),
+        Movement(id: 'b', date: '2026-11-20', description: 'Luz', category: 'Moradia', cents: 3000, estado: 'Previsto', account: 'main'),
+      ],
+    );
+
 void accountTests() {
+  testWidgets('Movimentos shows the balance left after each movement', (tester) async {
+    await pumpAt(tester, const Size(390, 844), state: _spentFrom105());
+    await tester.tap(find.byIcon(Icons.format_list_bulleted).first);
+    await tester.pumpAndSettle();
+    expect(find.text('saldo 50,00 €'), findsOneWidget);
+    expect(find.text('saldo 20,00 €'), findsOneWidget, reason: 'projected after the planned bill');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop Movimentos table has a balance column', (tester) async {
+    await pumpAt(tester, const Size(1440, 900), state: _spentFrom105());
+    await tester.tap(find.byIcon(Icons.format_list_bulleted).first);
+    await tester.pumpAndSettle();
+    expect(find.text('SALDO'), findsOneWidget);
+    expect(find.text('50,00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('add an account, then move money to it with a transfer', (tester) async {
     await pumpAt(tester, const Size(390, 844));
     // Ajustes → Contas → Nova conta

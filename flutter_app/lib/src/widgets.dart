@@ -273,9 +273,12 @@ class CyclePicker extends StatelessWidget {
 const _rowBorder = BoxDecoration(border: Border(bottom: BorderSide(color: Palette.line)));
 
 class MovementRow extends StatelessWidget {
-  const MovementRow(this.mv, this.m, {super.key});
+  const MovementRow(this.mv, this.m, {super.key, this.balance});
   final Movement mv;
   final Model m;
+
+  /// Account balance right after this movement, shown under the amount.
+  final int? balance;
 
   @override
   Widget build(BuildContext context) {
@@ -307,6 +310,11 @@ class MovementRow extends StatelessWidget {
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text('${transfer ? '⇄ ' : (income ? '+' : '−')}${app.money.amount(mv.cents)}',
                 style: mono(color: income ? Palette.accent : (transfer ? Palette.muted : Palette.text))),
+            if (balance != null) ...[
+              const SizedBox(height: 2),
+              Text(app.s.balanceAfter(app.money.full(balance!)),
+                  style: mono(size: 11, color: paid ? Palette.muted : Palette.warn)),
+            ],
             const SizedBox(height: 3),
             Text(app.s.estado(mv.estado).toUpperCase(),
                 style: mono(size: 11, weight: FontWeight.w500, color: paid ? Palette.muted : Palette.warn)

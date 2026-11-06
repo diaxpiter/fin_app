@@ -24,6 +24,17 @@ class Model {
   bool isIncome(String category) => _types[category] == 'Entrada';
   bool isTransferCategory(String category) => _types[category] == transferType;
   bool get multiAccount => state.accounts.length > 1;
+
+  /// Balance of each account right after each movement (see [runningBalances]).
+  late final Map<String, Map<String, int>> balances = runningBalances(state);
+
+  /// The balance to show next to [mv]: of [account] when the movement touches it
+  /// (the side of a transfer being looked at), otherwise of the account it's on.
+  int? balanceAfter(Movement mv, {String? account}) {
+    final b = balances[mv.id];
+    if (b == null) return null;
+    return (account != null ? b[account] : null) ?? b[mv.account ?? state.defaultAccount];
+  }
   Color colorOf(String category) => _colors[category] ?? Palette.fallbackDot;
 }
 

@@ -386,6 +386,28 @@ int accountCash(AppState state, String account) {
   return total;
 }
 
+/// Balance of each account a movement touches right after it, keyed by movement id then account id.
+/// Movements run in date order (income first within a day). A Pago movement gets the real
+/// balance, which counts only Pago movements up to it; a Previsto one gets the projected
+/// balance, which counts every movement up to it.
+Map<String, Map<String, int>> runningBalances(AppState state) {
+  final types = typesOf(state);
+  final paid = {for (final a in state.accounts) a.id: a.openingBalance};
+  final all = {...paid};
+  final out = <String, Map<String, int>>{};
+  for (final m in sortMovements(state.movements, types)) {
+    final isPaid = m.estado == 'Pago';
+    final deltas = accountDeltas(m, types, state.defaultAccount);
+    deltas.forEach((acc, d) {
+      all[acc] = (all[acc] ?? 0) + d;
+      if (isPaid) paid[acc] = (paid[acc] ?? 0) + d;
+    });
+    final source = isPaid ? paid : all;
+    out[m.id] = {for (final acc in {m.account ?? state.defaultAccount, ...deltas.keys}) acc: source[acc] ?? 0};
+  }
+  return out;
+}
+
 /// The opening balance that makes [account] hold [balanceToday].
 int openingBalanceFor(AppState state, String account, int balanceToday) =>
     balanceToday - (accountCash(state, account) - (state.accountById(account)?.openingBalance ?? 0));

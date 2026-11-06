@@ -172,6 +172,7 @@ class S {
   // ---- savings ----
   String get colDate => _t('Data', 'Date');
   String get colStatus => _t('Estado', 'Status');
+  String balanceAfter(String amount) => _t('saldo $amount', 'bal. $amount');
   String get shortcutsHint => _t('N nova despesa · 1–5 separadores', 'N new expense · 1–5 tabs');
   String get dashSavingsRate => _t('Taxa de poupança', 'Savings rate');
   String get dashAvgSpend => _t('Gasto médio por ciclo', 'Average spend per cycle');
